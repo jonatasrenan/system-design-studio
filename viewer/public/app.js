@@ -5,7 +5,36 @@
 //    em window.__DATA__ + auto-refresh por polling. Toda melhoria feita aqui
 //    entra idêntica no compartilhado — se algo precisar divergir, combinar com o usuário.
 const STATIC = !!window.__STATIC__;
-mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'loose',
+  // largura do diagrama é decisão de renderização, não do .mmd: rótulo longo quebra
+  // em linhas (em vez de esticar o nó) e o espaçamento entre nós fica menor.
+  flowchart: { useMaxWidth: true, htmlLabels: true, wrappingWidth: 160, nodeSpacing: 28, rankSpacing: 44, padding: 8 },
+  elk: { mergeEdges: true, nodePlacementStrategy: 'BRANDES_KOEPF' },
+});
+
+// O motor padrão (dagre) empilha ramos lado a lado e cresce sempre para os lados.
+// O ELK compacta em camadas e cresce para baixo — é o que mantém o desenho legível
+// quando a largura acaba. Se ele falhar (ou devolver um SVG sem nós, do qual os
+// tooltips dependem), cai para o motor padrão sem que o usuário perceba.
+async function renderFlowchart(id, src) {
+  const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
+  if (isFlowchart) {
+    try {
+      mermaid.initialize({ flowchart: { defaultRenderer: 'elk' } });
+      const out = await mermaid.render(`${id}-elk`, src);
+      const probe = document.createElement('div');
+      probe.innerHTML = out.svg;
+      if (probe.querySelector('svg') && probe.querySelectorAll('.node').length) return out;
+    } catch {
+      /* cai para o motor padrão */
+    }
+  }
+  mermaid.initialize({ flowchart: { defaultRenderer: 'dagre-wrapper' } });
+  return mermaid.render(id, src);
+}
 
 // Tachado só com ~~duplo~~: o default do marked/GFM aceita ~simples~, o que
 // transforma aproximações ("~0,5M ... ~30 B") em texto riscado e quebra o ** no meio.
@@ -42,6 +71,51 @@ const GLOBAL_TABS = [
   { id: '__argumentario__', label: '💬 Argumentário', key: 'argumentario' },
 ];
 
+// Zoom do diagrama: "ajustar" cabe na largura disponível; acima disso o diagrama
+// cresce e o contêiner rola, o que preserva a legibilidade em desenho largo.
+function setupDiagramZoom(root, wrap) {
+  const svg = wrap.querySelector('svg');
+  if (!svg) return;
+  const box = svg.viewBox?.baseVal;
+  const natural = box?.width || svg.getBoundingClientRect().width || 1;
+  const label = root.querySelector('.diagram-zoom-val');
+  let z = null; // null = ajustar à largura
+  const apply = () => {
+    const avail = wrap.clientWidth || natural;
+    const fit = Math.min(1, avail / natural);
+    const factor = z ?? fit;
+    svg.style.width = `${natural * factor}px`;
+    svg.style.maxWidth = 'none';
+    svg.style.height = 'auto';
+    wrap.classList.toggle('is-zoomed', factor > fit + 0.001);
+    label.textContent = `${Math.round(factor * 100)}%`;
+  };
+  root.querySelectorAll('.diagram-zoom button').forEach((b) => {
+    b.onclick = () => {
+      const avail = wrap.clientWidth || natural;
+      const fit = Math.min(1, avail / natural);
+      if (b.dataset.z === 'fit') z = null;
+      else z = Math.min(3, Math.max(0.2, (z ?? fit) * (b.dataset.z === 'in' ? 1.25 : 0.8)));
+      apply();
+    };
+  });
+  // arrastar para deslocar quando estiver ampliado
+  let drag = null;
+  wrap.addEventListener('pointerdown', (e) => {
+    if (!wrap.classList.contains('is-zoomed') || e.target.closest('.node')) return;
+    drag = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop };
+    wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    wrap.scrollLeft = drag.l - (e.clientX - drag.x);
+    wrap.scrollTop = drag.t - (e.clientY - drag.y);
+  });
+  wrap.addEventListener('pointerup', () => (drag = null));
+  addEventListener('resize', apply, { passive: true });
+  apply();
+}
+
 function tabTitle(file) {
   const m = file.content.match(/^#\s+(.+)$/m);
   if (m) return m[1].trim();
@@ -55,7 +129,7 @@ async function renderMermaidIn(container) {
     const holder = document.createElement('div');
     holder.className = 'mermaid-block';
     try {
-      const { svg } = await mermaid.render(`mm-${++mermaidSeq}`, src);
+      const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src);
       holder.innerHTML = svg;
     } catch (e) {
       holder.innerHTML = `<pre>${src}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
@@ -176,22 +250,29 @@ async function renderTab() {
           ${row('Alternativas', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
-      content.innerHTML = `<div class="diagram-wrap"></div>${legend}`;
+      content.innerHTML = `<div class="diagram-zoom">
+          <button data-z="out" title="Diminuir">−</button>
+          <button data-z="fit" title="Caber na largura">ajustar</button>
+          <button data-z="in" title="Aumentar">+</button>
+          <span class="diagram-zoom-val">100%</span>
+        </div><div class="diagram-wrap"></div>${legend}`;
       try {
-        const { svg } = await mermaid.render(`mm-${++mermaidSeq}`, s.diagram);
-        content.firstChild.innerHTML = svg;
+        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram);
+        const wrap = content.querySelector('.diagram-wrap');
+        wrap.innerHTML = svg;
+        setupDiagramZoom(content, wrap);
         // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
-        content.firstChild.querySelectorAll('.edgePaths').forEach((ep) => {
+        wrap.querySelectorAll('.edgePaths').forEach((ep) => {
           const anchor =
             ep.parentNode.querySelector(':scope > .edgeLabels') || ep.parentNode.querySelector(':scope > .nodes');
           if (anchor) ep.parentNode.insertBefore(ep, anchor);
         });
-        attachNodeTooltips(content.firstChild, comps);
+        attachNodeTooltips(wrap, comps);
         // clique na ficha → rola até o nó no diagrama e o destaca (inverso do clique no nó)
         content.querySelectorAll('.comp').forEach((card) => {
           card.addEventListener('click', (e) => {
             if (e.target.closest('.tr-link')) return;
-            const node = content.firstChild.querySelector(`.node[data-comp="${card.id.slice(5)}"]`);
+            const node = wrap.querySelector(`.node[data-comp="${card.id.slice(5)}"]`);
             if (!node) return;
             node.scrollIntoView({ behavior: 'smooth', block: 'center' });
             node.classList.add('node-flash');
@@ -199,7 +280,8 @@ async function renderTab() {
           });
         });
       } catch (e) {
-        content.firstChild.innerHTML = `<pre>${s.diagram}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
+        content.querySelector('.diagram-wrap').innerHTML =
+          `<pre>${s.diagram}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
       }
       content.querySelectorAll('.tr-link').forEach((a) => {
         a.onclick = async () => {
