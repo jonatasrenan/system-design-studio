@@ -5,7 +5,10 @@
 //    em window.__DATA__ + auto-refresh por polling. Toda melhoria feita aqui
 //    entra idêntica no compartilhado — se algo precisar divergir, combinar com o usuário.
 const STATIC = !!window.__STATIC__;
-mermaid.initialize({
+// Configuração base: toda chamada a mermaid.initialize SUBSTITUI a configuração
+// inteira (não faz merge), então quem re-inicializa precisa reenviar o tema junto —
+// senão o diagrama volta ao tema claro.
+const MERMAID_BASE = {
   startOnLoad: false,
   theme: 'dark',
   securityLevel: 'loose',
@@ -13,7 +16,10 @@ mermaid.initialize({
   // em linhas (em vez de esticar o nó) e o espaçamento entre nós fica menor.
   flowchart: { useMaxWidth: true, htmlLabels: true, wrappingWidth: 160, nodeSpacing: 28, rankSpacing: 44, padding: 8 },
   elk: { mergeEdges: true, nodePlacementStrategy: 'BRANDES_KOEPF' },
-});
+};
+const mermaidInit = (renderer) =>
+  mermaid.initialize({ ...MERMAID_BASE, flowchart: { ...MERMAID_BASE.flowchart, defaultRenderer: renderer } });
+mermaidInit('dagre-wrapper');
 
 // O motor padrão (dagre) empilha ramos lado a lado e cresce sempre para os lados.
 // O ELK compacta em camadas e cresce para baixo — é o que mantém o desenho legível
@@ -23,7 +29,7 @@ async function renderFlowchart(id, src) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
   if (isFlowchart) {
     try {
-      mermaid.initialize({ flowchart: { defaultRenderer: 'elk' } });
+      mermaidInit('elk');
       const out = await mermaid.render(`${id}-elk`, src);
       const probe = document.createElement('div');
       probe.innerHTML = out.svg;
@@ -32,7 +38,7 @@ async function renderFlowchart(id, src) {
       /* cai para o motor padrão */
     }
   }
-  mermaid.initialize({ flowchart: { defaultRenderer: 'dagre-wrapper' } });
+  mermaidInit('dagre-wrapper');
   return mermaid.render(id, src);
 }
 
