@@ -177,6 +177,20 @@ main .empty code {
 /* diagrama */
 .diagram-wrap { text-align: center; overflow: auto; max-height: 78vh; }
 .diagram-wrap svg { max-width: 100%; height: auto; }
+/* o renderizador ELK desenha os agrupamentos por outro caminho e não recebe as
+   variáveis do tema escuro — sem isto, o subgraph volta ao lavanda padrão */
+.diagram-wrap svg .cluster > rect,
+.diagram-wrap svg g.cluster rect.outer-path,
+.diagram-wrap svg g.cluster rect {
+  fill: rgba(255, 255, 255, 0.035) !important;
+  stroke: var(--border) !important;
+}
+.diagram-wrap svg .cluster-label text,
+.diagram-wrap svg .cluster-label span,
+.diagram-wrap svg g.cluster > text {
+  fill: var(--muted) !important;
+  color: var(--muted) !important;
+}
 .diagram-wrap.is-zoomed { cursor: grab; }
 .diagram-wrap.is-zoomed:active { cursor: grabbing; }
 .diagram-zoom { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin-bottom: 6px; }
