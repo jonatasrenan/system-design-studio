@@ -41,9 +41,7 @@ Também dá para conversar em linguagem natural ("vamos desenhar um encurtador d
 | `.env.example` | Semente da configuração pessoal (bucket, distribution, perfil AWS, porta) |
 | `CLAUDE.md` | As instruções que dirigem o agente: fases, protocolo de propagação, regras de escrita |
 
-O exemplo em `sessions/2026-08-09-encurtador-url/` é uma sessão real, do problema à avaliação. Foi a primeira do estúdio e antecede parte das convenções de hoje — não traz a ficha completa de componente, a "Defesa em 30s" por trade-off, nem os arquivos de POC e dúvidas.
-
-**O que é seu não vira commit.** As suas sessões (`sessions/*`, menos a de exemplo) e a sua memória (`learnings.md`, `argumentario.md`, criados dos `.template.md` no primeiro uso) estão no `.gitignore`. Assim dá para estudar em cima de um clone, ou de um fork, sem que o conteúdo dos seus designs apareça como mudança para mandar de volta. Para versionar os seus, use outro repositório — ou remova essas linhas do `.gitignore`, sabendo o que está publicando.
+**O que é seu não vira commit.** As suas sessões (`sessions/*`), a sua memória (`learnings.md` e `argumentario.md`, criados dos `.template.md` no primeiro uso) e a sua configuração (`.env`) estão no `.gitignore`. Assim dá para estudar em cima de um clone, ou de um fork, sem que o conteúdo dos seus designs apareça como mudança para mandar de volta. Para versionar os seus, use outro repositório — ou remova essas linhas do `.gitignore`, sabendo o que está publicando.
 
 ## Duas peças que merecem explicação
 

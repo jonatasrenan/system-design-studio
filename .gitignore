@@ -8,9 +8,9 @@ node_modules/
 learnings.md
 argumentario.md
 
-# sessões também são pessoais; só a de exemplo é versionada
+# sessões são pessoais e não vão para o repositório
 sessions/*
-!sessions/2026-08-09-encurtador-url/
+!sessions/.gitkeep
 
 # configuração pessoal (bucket, distribution, perfil AWS) — o repositório versiona
 # só o .env.example
