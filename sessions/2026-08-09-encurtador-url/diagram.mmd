@@ -1,0 +1,49 @@
+flowchart TB
+    subgraph clientes[Clientes]
+        B[👤 Browser / App]
+    end
+
+    subgraph edge[Edge]
+        WAF[🛡️ WAF · rate limit 10/min/IP no POST]
+        ALB[🧭 ALB multi-AZ · TLS]
+    end
+
+    subgraph servicos[Serviços]
+        R[⚙️ Serviço de Redirect]
+        W[⚙️ Serviço de Escrita]
+    end
+
+    subgraph dados[Dados]
+        REDIS[(⚡ Redis cache ~70 GB)]
+        DDB[(🗄️ DynamoDB · tabela links)]
+        CTR[(🗄️ DynamoDB · counter)]
+        REQS[(🗄️ DynamoDB · requests)]
+    end
+
+    subgraph async[Assíncrono]
+        Q[[📨 Fila de cliques]]
+        AGG[⏱️ Agregador de cliques]
+        RCHK[⏱️ Worker de recheck]
+    end
+
+    subgraph externos[Externos]
+        SB[🔌 Google Safe Browsing]
+    end
+
+    B -->|1· GET /code · POST /api/links| WAF
+    WAF --> ALB
+    ALB -->|2· 302 + Cache-Control 60s| R
+    ALB --> W
+    R -->|3· GET code · 10ms timeout · breaker| REDIS
+    R -->|4· miss: lookup 50ms · 1 retry| DDB
+    R -.->|clique · buffer 10k c/ descarte| Q
+    W -->|PutItem condicional| DDB
+    W -->|aloca faixa de 1M IDs| CTR
+    W -->|Idempotency-Key → code · TTL 24h| REQS
+    W -->|valida destino na criação| SB
+    W -->|popula na criação| REDIS
+    W -.->|SB fora: enfileira recheck| RCHK
+    Q --> AGG
+    AGG -->|ADD clicks N · janelas 10s| DDB
+    RCHK -->|revarre destinos · reprova → 410| DDB
+    RCHK --> SB

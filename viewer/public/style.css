@@ -1,0 +1,283 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --border: #2a2f3a;
+  --text: #d8dce5;
+  --muted: #8b93a3;
+  --accent: #6ea8fe;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+#session-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  max-width: 380px;
+}
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  margin-right: 4px;
+}
+.badge.status-concluido { color: var(--ok); border-color: var(--ok); }
+.badge.status-em-andamento { color: var(--warn); border-color: var(--warn); }
+#live-dot { margin-left: auto; color: var(--ok); font-size: 11px; }
+#live-dot.off { color: #ef4444; }
+
+/* navegação única: pipeline do processo + documentos globais */
+#pipeline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 60%, var(--bg));
+  overflow-x: auto;
+}
+.pipeline-track { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pipeline-track .arrow { color: var(--border); font-size: 11px; }
+button.stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 3px 10px 3px 7px;
+  cursor: pointer;
+}
+button.stage:hover:not(:disabled) { color: var(--text); }
+button.stage .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+button.stage.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+button.stage.ok .dot { background: var(--ok); }
+button.stage.editado { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); color: var(--text); }
+button.stage.editado .dot { background: var(--warn); }
+button.stage.desatualizado { border-color: #ef4444; color: #fca5a5; }
+button.stage.desatualizado .dot { background: #ef4444; animation: pulse 1.4s ease-in-out infinite; }
+button.stage.pendente { border-style: dashed; cursor: default; opacity: 0.55; }
+button.stage.stub { border-color: color-mix(in srgb, #f97316 60%, var(--border)); color: #fdba74; }
+button.stage.stub .dot { background: #f97316; }
+/* review com FALHAs abertas: vermelho fixo (sem pulsar — pulso é do "desatualizado") */
+button.stage.falhas { border-color: #ef4444; color: #fca5a5; }
+button.stage.falhas .dot { background: #ef4444; }
+button.stage.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: var(--accent); }
+button.stage.extra { padding: 3px 10px; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+.pipeline-note { font-size: 11px; color: var(--muted); border: 1px dashed var(--border); border-radius: 999px; padding: 2px 9px; white-space: nowrap; margin-left: 6px; }
+
+.global-tabs { margin-left: auto; display: flex; gap: 5px; padding-left: 14px; }
+button.gtab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.gtab:hover { color: var(--text); }
+button.gtab.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px clamp(18px, 5vw, 60px) 60px;
+}
+main .empty {
+  color: var(--muted);
+  text-align: center;
+  margin-top: 12vh;
+}
+main .empty code {
+  background: var(--panel);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* markdown */
+.md { max-width: 900px; margin: 0 auto; }
+.md h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.md h2 { font-size: 19px; margin-top: 30px; }
+.md h3 { font-size: 16px; }
+.md a { color: var(--accent); }
+.md code {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 13px;
+}
+.md pre {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+}
+.md pre code { background: none; border: none; padding: 0; }
+.md table { border-collapse: collapse; width: 100%; }
+.md th, .md td { border: 1px solid var(--border); padding: 7px 11px; text-align: left; }
+.md th { background: var(--panel); }
+.md blockquote {
+  border-left: 3px solid var(--accent);
+  margin-left: 0;
+  padding-left: 14px;
+  color: var(--muted);
+}
+
+/* visão geral */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.card-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.card-value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+.card-value small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.card.good { border-color: var(--ok); }
+.card.bad { border-color: #ef4444; }
+.overview td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.overview td .muted { color: var(--muted); opacity: 0.7; font-size: 11.5px; }
+.card .card-sub { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+
+/* diagrama */
+.diagram-wrap { text-align: center; overflow: auto; }
+.diagram-wrap svg { max-width: 100%; height: auto; }
+.comp-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+  max-width: 1200px;
+  margin: 22px auto 0;
+}
+.comp {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.comp b.comp-name { display: block; color: var(--accent); font-weight: 600; margin-bottom: 5px; font-size: 13px; }
+.comp span { color: var(--text); }
+.comp-row { display: flex; gap: 8px; margin-top: 3px; }
+.comp-row b { flex: 0 0 84px; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding-top: 1px; }
+.comp-row span { flex: 1; }
+.comp.flash { animation: comp-flash 1.6s ease-out; }
+@keyframes comp-flash {
+  0%, 40% { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+  100% { border-color: var(--border); box-shadow: none; }
+}
+.comp em { display: block; font-style: normal; color: var(--text); font-size: 12px; margin-top: 3px; }
+.comp i { display: block; font-style: normal; color: var(--muted); font-size: 11.5px; opacity: 0.75; margin-top: 2px; }
+.comp .tr-link { display: inline-block; color: var(--accent); font-size: 11.5px; margin-top: 3px; cursor: pointer; }
+
+/* tooltip dos nós do diagrama */
+#node-tip {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  max-width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+#node-tip b { display: block; color: var(--accent); margin-bottom: 2px; }
+#node-tip span { color: var(--text); display: block; }
+#node-tip em { display: block; font-style: normal; color: var(--muted); margin-top: 4px; }
+#node-tip i { display: block; font-style: normal; color: var(--muted); opacity: 0.7; margin-top: 2px; font-size: 11.5px; }
+#node-tip u { display: block; text-decoration: none; color: var(--accent); margin-top: 4px; font-size: 11.5px; }
+
+/* botão seguir + badge de compartilhamento */
+#follow-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+#follow-btn.on { color: var(--ok); border-color: var(--ok); }
+.badge.share { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+button.share-btn { background: none; cursor: pointer; }
+button.share-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* detalhes colapsáveis nos markdowns */
+.md details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin: 10px 0;
+  background: color-mix(in srgb, var(--panel) 55%, var(--bg));
+}
+.md details summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+.md .mermaid-block { text-align: center; background: none; border: none; }
+
+/* ficha → nó: destaque temporário no diagrama */
+.comp { cursor: pointer; }
+.node.node-flash rect,
+.node.node-flash polygon,
+.node.node-flash circle,
+.node.node-flash ellipse,
+.node.node-flash path {
+  stroke: var(--accent) !important;
+  stroke-width: 3px !important;
+}
+.node.node-flash { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 70%, transparent)); }
+
+/* público com design pronto: sem bolinhas de estado nem ponto "ao vivo" */
+body.all-green button.stage .dot { display: none; }
+body.all-green button.stage { padding-left: 10px; }
+body.all-green #live-dot { display: none; }
+
+/* destino de um link "→ trade-off": título acende ao chegar */
+.md h2.tr-flash { animation: tr-flash 2s ease-out; border-radius: 6px; }
+@keyframes tr-flash {
+  0%, 50% { background: color-mix(in srgb, var(--accent) 18%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 18%, transparent); }
+  100% { background: transparent; box-shadow: none; }
+}
+
+/* hover no nó: acende as arestas dele, esmaece o resto */
+.diagram-wrap svg .edgePaths path.edge-hl { stroke: var(--accent) !important; stroke-width: 2.5px !important; }
+.diagram-wrap svg .edgePaths path.edge-dim { opacity: 0.15; }
+.diagram-wrap svg .edgeLabels g.edge-dim { opacity: 0.12; }

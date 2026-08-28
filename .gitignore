@@ -1,0 +1,23 @@
+.DS_Store
+.idea/
+node_modules/
+
+# memória pessoal: o repositório versiona só os *.template.md, e as ferramentas
+# criam os arquivos reais no primeiro uso — assim o conteúdo de quem clona nunca
+# aparece como mudança para fazer upstream
+learnings.md
+argumentario.md
+
+# sessões também são pessoais; só a de exemplo é versionada
+sessions/*
+!sessions/2026-08-09-encurtador-url/
+
+# configuração pessoal (bucket, distribution, perfil AWS) — o repositório versiona
+# só o .env.example
+.env
+
+# estado local de máquina
+.claude/settings.local.json
+eval-report-*.md
+*.lock
+*.tmp

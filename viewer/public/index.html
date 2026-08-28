@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>jonatasrenan System Design Studio</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📐</text></svg>" />
+</head>
+<body>
+  <header>
+    <h1>jonatasrenan System Design Studio</h1>
+    <select id="session-select" title="Sessão"></select>
+    <span id="session-badges"></span>
+    <button id="follow-btn" title="Quando ligado, o painel acompanha a sessão e a etapa que a conversa está modificando"></button>
+    <span id="live-dot" title="conectado">●</span>
+  </header>
+  <div id="pipeline"></div>
+  <main id="content"></main>
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/mermaid.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
