@@ -1,51 +1,51 @@
-# Rubrica de Avaliação — System Design Interview
+# Grading Rubric — System Design Interview
 
-## O formato que este harness treina
+## The format this harness trains for
 
-Uma entrevista de system design típica entrega um problema de arquitetura aberto para o candidato evoluir ao vivo, com desenho — e avalia a solução ponta a ponta: resiliente, escalável, manutenível e confiável.
+A typical system design interview hands the candidate an open-ended architecture problem to evolve live, with a whiteboard — and evaluates the solution end to end: resilient, scalable, maintainable, and reliable.
 
-Duas implicações para o treino: o desenho é parte da avaliação, não acessório; e a conversa — perguntas, co-construção, trade-offs verbalizados — pesa tanto quanto o resultado final. Por isso cada sessão aqui produz artefatos e diagrama, não um chat.
+Two implications for practice: the drawing is part of the evaluation, not an accessory; and the conversation — questions, co-construction, verbalized trade-offs — weighs as much as the final result. That's why every session here produces artifacts and a diagram, not just a chat.
 
-## Critérios
+## Criteria
 
-Cada critério é avaliado de 1 a 4:
-1 = não demonstrou · 2 = superficial · 3 = sólido · 4 = destaque (profundidade + trade-offs explícitos)
+Each criterion is graded 1 to 4:
+1 = not demonstrated · 2 = superficial · 3 = solid · 4 = standout (depth + explicit trade-offs)
 
 ## 1. Problem-Solving
-- Entende e decompõe problemas complexos.
-- Mapeia requisitos, restrições e soluções possíveis.
-- Propõe arquitetura escalável, eficiente e confiável.
+- Understands and decomposes complex problems.
+- Maps requirements, constraints, and possible solutions.
+- Proposes a scalable, efficient, and reliable architecture.
 
-## 2. Fundamentos de System Design
-- Princípios: escalabilidade, disponibilidade, performance, manutenibilidade.
-- Conceitos distribuídos: balanceamento, cache, replicação, particionamento.
+## 2. System Design Fundamentals
+- Principles: scalability, availability, performance, maintainability.
+- Distributed concepts: load balancing, caching, replication, partitioning.
 
-## 3. Conhecimento Técnico
-- Bancos de dados, protocolos de rede, mensageria, storage, CDNs, observabilidade.
+## 3. Technical Knowledge
+- Databases, network protocols, messaging, storage, CDNs, observability.
 
-## 4. Modelagem de Dados & Armazenamento
-- Define modelos e esquemas para as necessidades da aplicação.
-- Domina SQL vs. NoSQL e seus prós/contras; estratégias de índices, sharding, consistência.
+## 4. Data Modeling & Storage
+- Defines models and schemas for the application's needs.
+- Masters SQL vs. NoSQL and their trade-offs; indexing, sharding, and consistency strategies.
 
-## 5. Escalabilidade & Performance
-- Dimensiona para crescimento de usuários e carga.
-- Conhece horizontal/vertical scaling, caching, queueing, backpressure.
+## 5. Scalability & Performance
+- Sizes for user and load growth.
+- Knows horizontal/vertical scaling, caching, queueing, backpressure.
 
-## 6. Tolerância a Falhas & Confiabilidade
-- Estratégias de redundância, failover, circuit breaker, retry, idempotência, DR.
-- Considera modelos de falha e mitigação.
+## 6. Fault Tolerance & Reliability
+- Redundancy, failover, circuit breaker, retry, idempotency, DR strategies.
+- Considers failure models and mitigation.
 
-## 7. Trade-offs & Decisão
-- Pesa performance, escalabilidade, simplicidade, custo, prazo.
-- Toma decisões informadas e explícitas.
+## 7. Trade-offs & Decision-Making
+- Weighs performance, scalability, simplicity, cost, timeline.
+- Makes informed, explicit decisions.
 
-## 8. Criatividade & Inovação
-- Explora soluções originais quando adequado; considera novas tecnologias com critério.
+## 8. Creativity & Innovation
+- Explores original solutions where appropriate; considers new technologies with judgment.
 
-## Boas práticas esperadas durante a entrevista
-- Priorizar conceitos antes de ferramentas: citar tecnologias explicando o racional vs. alternativas.
-- Aprofundar o problema antes da solução: validar requisitos e restrições.
-- Fazer perguntas e co-construir: usar o diálogo para refinar o design.
-- Explicar trade-offs: deixar explícito o que ganha e o que perde em cada escolha.
-- Pensar em operação: logs, métricas, tracing, deploy, rollback, feature flags, migrações.
-- Pensar no custo total: infraestrutura, time, complexidade, manutenção e risco.
+## Good practices expected during the interview
+- Prioritize concepts over tools: name technologies while explaining the rationale vs. alternatives.
+- Deepen the problem before the solution: validate requirements and constraints.
+- Ask questions and co-construct: use dialogue to refine the design.
+- Explain trade-offs: make explicit what each choice gains and loses.
+- Think about operations: logs, metrics, tracing, deploy, rollback, feature flags, migrations.
+- Think about total cost: infrastructure, team, complexity, maintenance, and risk.

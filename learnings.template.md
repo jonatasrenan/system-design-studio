@@ -1,19 +1,19 @@
-# Aprendizados
+# Learnings
 
-Memória entre sessões: erros que se repetem e viraram gatilho de atenção. Cada item nasce de uma avaliação, de uma correção durante um estudo, ou de pesquisa — e é lido no início de toda sessão nova, para alertar antes do erro acontecer (modo estúdio) ou virar alvo de provocação (modo entrevista).
+Cross-session memory: mistakes that keep recurring and became attention triggers. Each item is born from an evaluation, a correction made during a study session, or research — and is read at the start of every new session, to warn before the mistake happens again (studio mode) or to become a target of provocation (interview mode).
 
-Status: **aberto** (ainda erro/esqueço) → **dominado** (demonstrado com solidez em sessão posterior).
+Status: **aberto** (still a mistake/still forgotten) → **dominado** (demonstrated solidly in a later session).
 
-Formato de cada item:
+Format of each item:
 
 ```
-## <tema curto>
+## <short theme>
 - **Status**: aberto | dominado
-- **Origem**: sessions/<slug> (data)
-- **Aprendizado**: o que ficou claro, em 1-3 frases.
-- **Como aplicar**: gatilho prático para a próxima vez.
+- **Origem**: sessions/<slug> (date)
+- **Aprendizado**: what became clear, in 1-3 sentences.
+- **Como aplicar**: practical trigger for next time.
 ```
 
 ---
 
-_(vazio — os primeiros itens aparecem depois da primeira avaliação)_
+_(empty — the first items appear after the first evaluation)_

@@ -1,20 +1,20 @@
-// Setup determinístico e COMPLETO de sessão — a LLM nunca datilografa esqueleto
-// nem gasta chamadas extras com viewer/learnings.
-// Uso: node tools/new-session.mjs "Título do design" [--mode estudio|entrevista]
-//                                  [--slug <slug>] [--no-viewer]
-// Faz em uma chamada: cria sessions/<yyyy-mm-dd>-<slug>/ (meta.json + scorecard.json),
-// garante o viewer de pé (sobe em background se preciso) e imprime no stdout:
-//   linha 1: o slug
-//   depois:  status do viewer, learnings com status "aberto" e o argumentário.
-// O agente usa essa saída direto — sem curl de health nem Reads separados.
+// Deterministic and COMPLETE session setup — the LLM never types out the skeleton
+// nor spends extra calls on viewer/learnings.
+// Usage: node tools/new-session.mjs "Design title" [--mode estudio|entrevista]
+//                                    [--slug <slug>] [--no-viewer]
+// Does in one call: creates sessions/<yyyy-mm-dd>-<slug>/ (meta.json + scorecard.json),
+// makes sure the viewer is up (starts it in background if needed), and prints to stdout:
+//   line 1: the slug
+//   then:   viewer status, learnings with status "aberto", and the argumentário.
+// The agent uses this output directly — no separate health curl or Reads.
 //
-// Execução paralela (vários agentes, um por sessão):
-//   --slug <slug>   nome exato do diretório (o orquestrador pré-atribui nomes únicos e
-//                   pode exportar SD_SESSION=<slug> para o agente — ver check.mjs --hook)
-//   --no-viewer     (ou SD_NO_VIEWER=1) não checa nem sobe o viewer — o painel é
-//                   conveniência interativa, nunca dependência do fluxo
-//   a criação do diretório é atômica (mkdir sem recursive): dois agentes com o mesmo
-//   slug → exatamente um vence, o outro falha com "sessão já existe".
+// Parallel execution (several agents, one per session):
+//   --slug <slug>   exact directory name (the orchestrator pre-assigns unique names and
+//                   can export SD_SESSION=<slug> to the agent — see check.mjs --hook)
+//   --no-viewer     (or SD_NO_VIEWER=1) doesn't check or start the viewer — the panel is
+//                   an interactive convenience, never a dependency of the flow
+//   directory creation is atomic (mkdir without recursive): two agents with the same
+//   slug → exactly one wins, the other fails with "session already exists".
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -29,21 +29,21 @@ const mode = args.includes('--mode') ? args[args.indexOf('--mode') + 1] : 'estud
 const slugArg = args.includes('--slug') ? args[args.indexOf('--slug') + 1] : null;
 const noViewer = args.includes('--no-viewer') || process.env.SD_NO_VIEWER === '1';
 if (!title) {
-  console.error('uso: node tools/new-session.mjs "Título do design" [--mode estudio|entrevista] [--slug <slug>] [--no-viewer]');
+  console.error('usage: node tools/new-session.mjs "Design title" [--mode estudio|entrevista] [--slug <slug>] [--no-viewer]');
   process.exit(1);
 }
-// flag sem valor (no fim da linha) criava sessão sem "mode" — inválida para sempre,
-// travando o Stop hook de todo turno até alguém editar meta.json na mão.
+// a flag with no value (at the end of the line) used to create a session without "mode" — invalid
+// forever, blocking the Stop hook on every turn until someone edited meta.json by hand.
 if (!['estudio', 'entrevista'].includes(mode)) {
-  console.error(`--mode inválido: "${mode ?? '(vazio)'}" — use estudio ou entrevista`);
+  console.error(`invalid --mode: "${mode ?? '(empty)'}" — use estudio or entrevista`);
   process.exit(1);
 }
 if (args.includes('--slug') && !slugArg) {
-  console.error('--slug sem valor');
+  console.error('--slug with no value');
   process.exit(1);
 }
 if (slugArg && !/^[a-z0-9][a-z0-9-]{0,80}$/.test(slugArg)) {
-  console.error(`--slug inválido: "${slugArg}" (use só [a-z0-9-], ex.: 2026-08-26-meu-design)`);
+  console.error(`invalid --slug: "${slugArg}" (use only [a-z0-9-], e.g.: 2026-08-26-my-design)`);
   process.exit(1);
 }
 
@@ -58,18 +58,18 @@ const slugify = (s) =>
     .slice(0, 48);
 const slugTitle = slugify(title);
 if (!slugArg && !slugTitle) {
-  console.error(`título sem letras nem números ("${title}") — não dá para derivar um nome de sessão; use --slug`);
+  console.error(`title has no letters or digits ("${title}") — can't derive a session name from it; use --slug`);
   process.exit(1);
 }
 const slug = slugArg ?? `${today}-${slugTitle}`;
 const dir = path.join(ROOT, 'sessions', slug);
 fs.mkdirSync(path.join(ROOT, 'sessions'), { recursive: true });
-// mkdir SEM recursive é atômico: sob concorrência, só um criador passa (EEXIST para os demais)
+// mkdir WITHOUT recursive is atomic: under concurrency, only one creator gets through (EEXIST for the rest)
 try {
   fs.mkdirSync(dir);
 } catch (e) {
   if (e.code === 'EEXIST') {
-    console.error(`sessão já existe: ${slug}`);
+    console.error(`session already exists: ${slug}`);
     process.exit(1);
   }
   throw e;
@@ -78,7 +78,7 @@ try {
 fs.writeFileSync(
   path.join(dir, 'meta.json'),
   JSON.stringify(
-    // uuid: identidade permanente do design — é o caminho público se um dia for compartilhado
+    // uuid: the design's permanent identity — becomes the public path if it's ever shared
     { title, mode, status: 'em-andamento', created: today, updated: today, uuid: crypto.randomUUID() },
     null,
     2
@@ -102,35 +102,36 @@ fs.writeFileSync(
   ) + '\n'
 );
 
-// (sem stub de 00-problema.md: a LLM o escreve por inteiro na sequência —
-//  o stub só custava um Read-antes-de-Write)
+// (no 00-problema.md stub: the LLM writes it in full right after —
+//  a stub would only have cost a Read-before-Write)
 
 console.log(slug);
-console.log('criados: meta.json, scorecard.json — 00-problema.md e etapas NÃO existem ainda (Write direto, sem Read)');
+console.log('created: meta.json, scorecard.json — 00-problema.md and the stages do NOT exist yet (Write directly, no Read)');
 
-// --- viewer: garante de pé, sem chamada separada do agente ---
+// --- viewer: made sure to be up, without a separate call from the agent ---
 loadEnv(ROOT);
 const PORT = process.env.PORT || process.env.SD_PORT || 4400;
 if (noViewer) {
-  console.log('viewer: ignorado (--no-viewer)');
+  console.log('viewer: skipped (--no-viewer)');
 } else {
   try {
     const res = await fetch(`http://localhost:${PORT}/api/health`, { signal: AbortSignal.timeout(800) });
     if (!res.ok) throw new Error(String(res.status));
     console.log(`viewer: ok (http://localhost:${PORT})`);
   } catch {
-    // repassa a porta: sem isso o viewer subiria na 4400 e o health-check apontaria para outra
+    // pass the port through: without this the viewer would start on 4400 and the
+    // health check would point at a different one
     const child = spawn('node', [path.join(ROOT, 'viewer', 'server.mjs')], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, PORT: String(PORT) },
     });
     child.unref();
-    console.log(`viewer: iniciado em background (http://localhost:${PORT}) — avise o usuário para abrir`);
+    console.log(`viewer: started in background (http://localhost:${PORT}) — tell the user to open it`);
   }
 }
 
-// --- learnings abertos + argumentário: entregues aqui, sem Reads separados ---
+// --- open learnings + argumentário: delivered here, no separate Reads ---
 ensureMemoryFiles(ROOT);
 const readRoot = (n) => {
   try {
@@ -146,12 +147,12 @@ const abertos = [...learnings.matchAll(/^##\s+(.+)$([\s\S]*?)(?=^##\s|\s*$(?![\s
     const como = body.match(/\*\*Como aplicar\*\*:\s*(.+)/)?.[1] ?? '';
     return `- ${title.trim()}${como ? ` — ${como.trim()}` : ''}`;
   });
-console.log(`\n--- learnings abertos (alertas ativos desta sessão) ---`);
-console.log(abertos.length ? abertos.join('\n') : '(nenhum)');
-// só as entradas (`## …`), nunca o cabeçalho nem o bloco de formato
+console.log(`\n--- open learnings (active alerts for this session) ---`);
+console.log(abertos.length ? abertos.join('\n') : '(none)');
+// only the entries (`## …`), never the header nor the format block
 const argumentario = readRoot('argumentario.md').replace(/```[\s\S]*?```/g, '');
 const padroes = [...argumentario.matchAll(/^##\s[\s\S]*?(?=^##\s|\s*$(?![\s\S]))/gm)].map(([e]) => e.trim());
 if (padroes.length) {
-  console.log(`\n--- argumentário (padrões já dominados — não rediscutir do zero) ---`);
+  console.log(`\n--- argumentário (patterns already mastered — don't re-discuss from scratch) ---`);
   console.log(padroes.join('\n\n'));
 }

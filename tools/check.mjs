@@ -1,28 +1,28 @@
-// Checker de consistência das sessões.
+// Consistency checker for sessions.
 //
-// Duas classes de verificação, ambas determinísticas:
-//  - estruturais: meta.json/scorecard.json válidos; sessão "concluido" exige
-//    review presente e guardrails sem FALHA.
-//  - staleness: o pipeline é um DAG linear (problema → requisitos → estimativas
-//    → design → trade-offs → operação → diagrama/scorecard → dúvidas → review
-//    → poc → avaliação; a ordem canônica é ORDER, em pipeline.mjs).
-//    Um `.state.json` por sessão guarda os hashes do último estado consistente
-//    (baseline). Se um arquivo upstream mudou desde a baseline e algum downstream
-//    não mudou, o downstream está potencialmente desatualizado — o agente precisa
-//    revisitá-lo (atualizar ou confirmar que nada muda) e rodar --baseline.
+// Two kinds of checks, both deterministic:
+//  - structural: valid meta.json/scorecard.json; a "concluido" session requires
+//    a review to be present and guardrails with no FALHA.
+//  - staleness: the pipeline is a linear DAG (problem → requirements → estimates
+//    → design → trade-offs → operations → diagram/scorecard → questions → review
+//    → poc → evaluation; the canonical order is ORDER, in pipeline.mjs).
+//    A per-session `.state.json` stores the hashes of the last consistent state
+//    (baseline). If an upstream file changed since the baseline and some downstream
+//    file didn't, the downstream file is potentially stale — the agent needs to
+//    revisit it (update it or confirm nothing changes) and run --baseline.
 //
-// Uso:
-//   node tools/check.mjs                  # verifica todas as sessões
-//   node tools/check.mjs <slug>           # verifica uma sessão
-//   node tools/check.mjs <slug> --baseline  # valida estrutura e marca o estado como consistente
-//   node tools/check.mjs <slug> --lint    # lints determinísticos de review (diagrama, filas, jargão...)
-//   node tools/check.mjs --hook           # modo Stop-hook: exit 2 bloqueia o turno
+// Usage:
+//   node tools/check.mjs                  # checks every session
+//   node tools/check.mjs <slug>           # checks one session
+//   node tools/check.mjs <slug> --baseline  # validates structure and marks the state as consistent
+//   node tools/check.mjs <slug> --lint    # deterministic review lints (diagram, queues, jargon...)
+//   node tools/check.mjs --hook           # Stop-hook mode: exit 2 blocks the turn
 //
-// Escopo por agente (execução paralela): com a variável de ambiente SD_SESSION=<slug>,
-// o modo --hook (e a chamada sem slug) verifica SÓ essa sessão — o Stop hook de um
-// agente nunca é bloqueado pela sessão em andamento de outro. Slug explícito na linha
-// de comando continua tendo prioridade. Em --hook, SD_SESSION apontando para sessão
-// que ainda não existe é ignorada (exit 0).
+// Per-agent scoping (parallel execution): with the SD_SESSION=<slug> environment
+// variable, --hook mode (and the no-slug call) checks ONLY that session — one
+// agent's Stop hook is never blocked by another agent's in-progress session.
+// An explicit slug on the command line still takes priority. In --hook mode,
+// SD_SESSION pointing to a session that doesn't exist yet is ignored (exit 0).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,23 +31,23 @@ import { ORDER, hashFile, stageStatus, parseDiagram, JARGON, writeAtomic } from 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSIONS_DIR = path.join(ROOT, 'sessions');
 
-// aceita um slug de sessions/ ou um caminho de diretório (ex.: golden de eval)
+// accepts a sessions/ slug or a directory path (e.g. an eval golden)
 const resolveDir = (slug) => (slug.includes('/') ? path.resolve(slug) : path.join(SESSIONS_DIR, slug));
 
 function checkSession(slug) {
   const dir = resolveDir(slug);
   const problems = [];
   const file = (n) => path.join(dir, n);
-  if (!fs.existsSync(dir)) return [`sessão não encontrada: ${slug} (verifique o slug em sessions/)`];
+  if (!fs.existsSync(dir)) return [`session not found: ${slug} (check the slug under sessions/)`];
 
-  // --- estruturais ---
+  // --- structural ---
   let meta = null;
   try {
     meta = JSON.parse(fs.readFileSync(file('meta.json'), 'utf8'));
     for (const k of ['title', 'mode', 'status'])
-      if (!meta[k]) problems.push(`meta.json sem campo "${k}"`);
+      if (!meta[k]) problems.push(`meta.json missing field "${k}"`);
   } catch (e) {
-    problems.push(`meta.json ausente ou inválido: ${e.message}`);
+    problems.push(`meta.json missing or invalid: ${e.message}`);
   }
 
   let scorecard = null;
@@ -55,29 +55,29 @@ function checkSession(slug) {
     try {
       scorecard = JSON.parse(fs.readFileSync(file('scorecard.json'), 'utf8'));
       for (const it of scorecard?.costs?.items ?? []) {
-        if (typeof it.cost !== 'number') problems.push(`scorecard: custo não-numérico em "${it.component}"`);
+        if (typeof it.cost !== 'number') problems.push(`scorecard: non-numeric cost in "${it.component}"`);
         if (it.cost10x !== undefined && typeof it.cost10x !== 'number')
-          problems.push(`scorecard: cost10x não-numérico em "${it.component}"`);
+          problems.push(`scorecard: non-numeric cost10x in "${it.component}"`);
       }
     } catch (e) {
-      problems.push(`scorecard.json inválido: ${e.message}`);
+      problems.push(`invalid scorecard.json: ${e.message}`);
     }
   }
 
   if (meta?.status === 'concluido') {
     if (!fs.existsSync(file('45-review.md')))
-      problems.push('status "concluido" sem 45-review.md (rode a revisão de guardrails)');
+      problems.push('status "concluido" without 45-review.md (run the guardrails review)');
     const g = scorecard?.guardrails;
-    if (!g) problems.push('status "concluido" sem bloco guardrails no scorecard');
-    else if (g.falha > 0) problems.push(`status "concluido" com ${g.falha} FALHA(s) aberta(s) nos guardrails`);
+    if (!g) problems.push('status "concluido" without a guardrails block in the scorecard');
+    else if (g.falha > 0) problems.push(`status "concluido" with ${g.falha} open FALHA(s) in the guardrails`);
   }
 
-  // --- ritual de baseline: design de pé sem baseline = consistência não rastreada ---
+  // --- baseline ritual: a standing design without a baseline = untracked consistency ---
   const { baseline: hasBaseline, stages } = stageStatus(dir);
   if (!hasBaseline && fs.existsSync(file('30-design.md')) && fs.existsSync(file('40-tradeoffs.md'))) {
     problems.push(
-      `design de pé sem baseline de consistência — rode: node tools/check.mjs ${slug} --baseline ` +
-        `(sem ela, mudanças de premissa não são rastreadas)`
+      `standing design without a consistency baseline — run: node tools/check.mjs ${slug} --baseline ` +
+        `(without it, premise changes aren't tracked)`
     );
   }
   if (hasBaseline) {
@@ -85,9 +85,9 @@ function checkSession(slug) {
     const stale = stages.filter((s) => s.status === 'desatualizado').map((s) => s.name);
     if (changed.length && stale.length) {
       problems.push(
-        `mudou desde a última baseline: ${changed.join(', ')} — ` +
-          `desatualizados (não tocados): ${stale.join(', ')}. ` +
-          `Propague a mudança (ou confirme que cada um não é afetado) e rode: ` +
+        `changed since the last baseline: ${changed.join(', ')} — ` +
+          `stale (untouched): ${stale.join(', ')}. ` +
+          `Propagate the change (or confirm each one is unaffected) and run: ` +
           `node tools/check.mjs ${slug} --baseline`
       );
     }
@@ -99,14 +99,14 @@ function checkSession(slug) {
 function baseline(slug, force) {
   const dir = resolveDir(slug);
   if (!fs.existsSync(dir)) {
-    console.error(`sessão não encontrada: ${slug}`);
+    console.error(`session not found: ${slug}`);
     process.exit(1);
   }
-  // valida a estrutura antes de gravar — baseline sobre estado quebrado congela o problema.
-  // (staleness pendente NÃO bloqueia: resolvê-la é exatamente o papel da baseline)
+  // validate structure before writing the baseline — a baseline over a broken state freezes the problem.
+  // (pending staleness does NOT block: resolving it is exactly the baseline's job)
   const structural = checkSession(slug).filter((p) => !/baseline/.test(p));
   if (structural.length && !force) {
-    console.error(`estrutura inválida — corrija antes de gravar a baseline (ou use --force):\n- ${structural.join('\n- ')}`);
+    console.error(`invalid structure — fix it before recording the baseline (or use --force):\n- ${structural.join('\n- ')}`);
     process.exit(1);
   }
   const hashes = {};
@@ -115,15 +115,15 @@ function baseline(slug, force) {
     if (fs.existsSync(p)) hashes[name] = hashFile(p);
   }
   fs.writeFileSync(path.join(dir, '.state.json'), JSON.stringify({ hashes, at: new Date().toISOString() }, null, 2));
-  console.log(`baseline gravada para ${slug} (${Object.keys(hashes).length} arquivos)`);
+  console.log(`baseline recorded for ${slug} (${Object.keys(hashes).length} files)`);
 }
 
-// --- lints determinísticos de review: o que é regex/parse sai da LLM e vive aqui ---
+// --- deterministic review lints: whatever is regex/parse stays out of the LLM and lives here ---
 const TAXONOMY = ['👤', '🌐', '🧭', '⚙️', '🗄️', '⚡', '📨', '⏱️', '📊', '🛡️', '🔌'];
 function lintSession(slug) {
   const dir = resolveDir(slug);
   if (!fs.existsSync(dir)) {
-    console.error(`sessão não encontrada: ${slug}`);
+    console.error(`session not found: ${slug}`);
     process.exit(1);
   }
   const read = (n) => {
@@ -145,9 +145,9 @@ function lintSession(slug) {
 
   if (diagram) {
     const { nodes, edges, subgraphs } = parseDiagram(diagram);
-    if (subgraphs.length < 2) falhas.push('diagrama sem agrupamentos (subgraphs) — ilegível');
+    if (subgraphs.length < 2) falhas.push('diagram has no groupings (subgraphs) — illegible');
     const isActor = (n) => /cliente/i.test(n.subgraph ?? '') || n.label.includes('👤');
-    // token-overlap ≥ 0.5 — mesmo critério do casamento nó↔ficha do viewer
+    // token-overlap ≥ 0.5 — same criterion the viewer uses to match a node ↔ sheet
     const normTok = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\\n/g, ' ');
     const tokens = (s) => new Set(normTok(s).split(/[^a-z0-9]+/).filter((t) => t.length > 2));
     const matches = (label, name) => {
@@ -160,52 +160,52 @@ function lintSession(slug) {
     const noEmoji = [];
     for (const n of nodes) {
       if (isActor(n)) continue;
-      if (!hasComp(n)) falhas.push(`nó "${n.id}" sem entrada em components (legenda) no scorecard`);
-      if (!hasCost(n)) falhas.push(`nó "${n.id}" sem entrada em costs.items no scorecard`);
-      if (n.lines > 3) avisos.push(`nó "${n.id}" com rótulo de ${n.lines} linhas (budget: 3 — detalhe pertence à ficha)`);
+      if (!hasComp(n)) falhas.push(`node "${n.id}" has no entry in the scorecard's components (legend)`);
+      if (!hasCost(n)) falhas.push(`node "${n.id}" has no entry in the scorecard's costs.items`);
+      if (n.lines > 3) avisos.push(`node "${n.id}" has a ${n.lines}-line label (budget: 3 — detail belongs in the sheet)`);
       if (!TAXONOMY.some((e) => n.label.includes(e))) noEmoji.push(n.id);
-      // fila = forma [[...]] ou rótulo que COMEÇA nomeando uma fila ("página de fila" não conta)
+      // queue = shape [[...]] or a label that STARTS by naming a queue ("queue page" doesn't count)
       const isQueue = n.shape === '[[' || /^"?\s*(fila|queue|t[óo]pico|stream)\b/i.test(n.label);
       if (isQueue) {
         const ficha = comps.find((c) => matches(n.label, c.name));
         const texto = `${n.label} ${ficha?.purpose ?? ''} ${ficha?.failure ?? ''}`;
         if (!/DLQ|perda aceita|descarte|dead.?letter/i.test(texto))
-          falhas.push(`fila "${n.id}" sem destino de falha declarado (DLQ + reprocesso, ou "perda aceita")`);
+          falhas.push(`queue "${n.id}" has no declared failure destination (DLQ + reprocessing, or "accepted loss")`);
       }
     }
-    if (noEmoji.length) avisos.push(`${noEmoji.length} nó(s) sem emoji da taxonomia: ${noEmoji.join(', ')}`);
+    if (noEmoji.length) avisos.push(`${noEmoji.length} node(s) without a taxonomy emoji: ${noEmoji.join(', ')}`);
     for (const n of nodes)
       if (/observabilidad|telemetria|monitor(amento|ing)\b/i.test(n.label))
         avisos.push(
-          `nó "${n.id}" parece coleta de telemetria — coleta universal não se desenha (sinais vivem na operação); mantenha só se for componente do próprio problema`
+          `node "${n.id}" looks like telemetry collection — universal collection isn't drawn (signals live in operations); keep it only if it's a component of the problem itself`
         );
-    if (nodes.length > 15) avisos.push(`diagrama com ${nodes.length} nós (budget: ~15 — considere um nó-sistema + sub-diagrama de zoom)`);
+    if (nodes.length > 15) avisos.push(`diagram with ${nodes.length} nodes (budget: ~15 — consider a system-node + a zoom sub-diagram)`);
     const numbered = edges.filter((e) => /^"?\s*\d+\s*[·.]/.test(e.label));
-    if (!numbered.length) falhas.push('nenhuma aresta numerada — o fluxo principal deve contar a história (1·, 2·…)');
+    if (!numbered.length) falhas.push('no numbered edge — the main flow must tell the story (1·, 2·…)');
     else {
       const first = numbered.find((e) => /^"?\s*1\s*[·.]/.test(e.label));
       const fromNode = first && nodes.find((n) => n.id === first.from);
       if (first && fromNode && !isActor(fromNode))
-        falhas.push(`a aresta 1· parte de "${first.from}" — o fluxo deve começar na chegada do usuário (subgraph de clientes)`);
+        falhas.push(`edge 1· starts from "${first.from}" — the flow must start at the user's arrival (clients subgraph)`);
     }
     const actors = nodes.filter(isActor);
-    if (actors.length === 1) avisos.push('nenhum ator além do usuário final (organizador/back-office/ops — quase todo sistema tem)');
+    if (actors.length === 1) avisos.push('no actor besides the end user (organizer/back office/ops — almost every system has one)');
   } else {
-    falhas.push('diagram.mmd ausente');
+    falhas.push('diagram.mmd missing');
   }
 
   for (const f of ORDER.filter((n) => n.endsWith('.md'))) {
     const c = read(f);
     if (!c) continue;
     for (const [i, line] of c.split('\n').entries())
-      if (JARGON.test(line)) falhas.push(`jargão interno em ${f}:${i + 1} — artefatos são compartilháveis`);
+      if (JARGON.test(line)) falhas.push(`internal jargon in ${f}:${i + 1} — artifacts are shareable`);
   }
 
   const tradeoffs = read('40-tradeoffs.md');
   if (tradeoffs) {
     const entries = (tradeoffs.match(/^##\s+(?!Decisões adiadas|Referências de mercado)/gm) ?? []).length;
     const defesas = (tradeoffs.match(/Defesa em 30s/g) ?? []).length;
-    if (entries > defesas) avisos.push(`${entries - defesas} trade-off(s) sem "Defesa em 30s"`);
+    if (entries > defesas) avisos.push(`${entries - defesas} trade-off(s) without "Defesa em 30s"`);
   }
 
   for (const f of falhas) console.log(`FALHA: ${f}`);
@@ -232,7 +232,7 @@ const slugArg = args.find((a) => !a.startsWith('--')) ?? envSlug;
 
 if (doBaseline) {
   if (!slugArg) {
-    console.error('uso: node tools/check.mjs <slug> --baseline [--force]');
+    console.error('usage: node tools/check.mjs <slug> --baseline [--force]');
     process.exit(1);
   }
   baseline(slugArg, args.includes('--force'));
@@ -241,21 +241,21 @@ if (doBaseline) {
 
 if (doLint) {
   if (!slugArg) {
-    console.error('uso: node tools/check.mjs <slug> --lint');
+    console.error('usage: node tools/check.mjs <slug> --lint');
     process.exit(1);
   }
-  // --lint é portão: FALHA sai != 0 para poder ser usado em gate, como o modo hook
+  // --lint is a gate: FALHA exits != 0 so it can be used as a gate, like hook mode
   process.exit(lintSession(slugArg) ? 0 : 1);
 }
 
 let slugs = slugArg ? [slugArg] : allSlugs();
-// hook escopado por SD_SESSION: sessão ainda não criada não é problema — é o agente que
-// ainda não rodou new-session; nada a verificar
+// hook scoped by SD_SESSION: a session that doesn't exist yet isn't a problem — it just
+// means the agent hasn't run new-session yet; nothing to check
 if (hookMode && envSlug && slugArg === envSlug && !fs.existsSync(resolveDir(envSlug))) slugs = [];
 
-// Em modo hook, sessão com atividade nos últimos 2 min é trabalho EM ANDAMENTO
-// de alguma conversa — o dono dela propaga e baselina no próprio turno.
-// Sem a carência, o Stop hook de uma conversa bloqueia pelo meio-do-turno de outra.
+// In hook mode, a session with activity in the last 2 minutes is WORK IN PROGRESS
+// from some conversation — its owner propagates and baselines in their own turn.
+// Without this grace period, one conversation's Stop hook would block mid-turn for another.
 const inFlight = (slug) => {
   const dir = resolveDir(slug);
   let m = 0;
@@ -275,18 +275,18 @@ for (const slug of slugs) {
 }
 
 if (hookMode) {
-  // lido do Stop hook: exit 2 bloqueia o encerramento do turno e devolve o
-  // stderr ao agente. Se o hook já bloqueou uma vez neste encadeamento
-  // (stop_hook_active), libera com aviso para não entrar em loop infinito.
+  // read from the Stop hook: exit 2 blocks the turn from ending and returns
+  // stderr to the agent. If the hook already blocked once in this chain
+  // (stop_hook_active), release with a warning to avoid an infinite loop.
   let stopHookActive = false;
   try {
     const stdin = fs.readFileSync(0, 'utf8');
     stopHookActive = !!JSON.parse(stdin).stop_hook_active;
   } catch {}
   if (!report.length) process.exit(0);
-  const msg = `Sessões de system design inconsistentes:\n- ${report.join('\n- ')}`;
+  const msg = `Inconsistent system design sessions:\n- ${report.join('\n- ')}`;
   if (stopHookActive) {
-    console.log(`${msg}\n(aviso: já houve um bloqueio neste turno; liberando para evitar loop)`);
+    console.log(`${msg}\n(warning: this chain already had a block this turn; releasing to avoid a loop)`);
     process.exit(0);
   }
   console.error(msg);
@@ -294,7 +294,7 @@ if (hookMode) {
 }
 
 if (!report.length) {
-  console.log(`ok — ${slugs.length} sessão(ões) consistente(s)`);
+  console.log(`ok — ${slugs.length} session(s) consistent`);
 } else {
   console.log(report.map((r) => `✗ ${r}`).join('\n'));
   process.exit(1);

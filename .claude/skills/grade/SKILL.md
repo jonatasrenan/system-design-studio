@@ -1,22 +1,22 @@
 ---
 name: grade
-description: Avalia uma sessão de system design contra a rubrica da entrevista, gerando notas por critério, lacunas e plano de estudo em 60-avaliacao.md. Use quando o usuário digitar /grade ou pedir avaliação de um design.
+description: Grades a system design session against the interview rubric, producing per-criterion scores, gaps, and a study plan in 60-avaliacao.md. Use when the user types /grade or asks for a design to be graded.
 ---
 
-# /grade — avaliação contra a rubrica
+# /grade — grading against the rubric
 
-1. Resolva a sessão-alvo: a ativa na conversa; senão, liste `sessions/*/meta.json` e pergunte qual avaliar.
-2. **Se a sessão foi conduzida nesta conversa, use o contexto** — releia apenas `rubric.md` e o que não passou pela conversa. Em conversa nova, leia todos os arquivos da sessão e a `rubric.md` da raiz.
-3. Avalie cada um dos 8 critérios com nota 1-4. Para cada critério:
-   - **Evidência**: citações/fatos concretos da sessão que sustentam a nota.
-   - **Lacunas**: o que um entrevistador esperaria e não apareceu (seja específico: "não discutiu idempotência no consumer", não "faltou confiabilidade").
-4. Verifique também as boas práticas da rubrica (conceito antes de ferramenta, trade-offs explícitos, operação, custo total) e o diagrama: `diagram.mmd` reflete o design final? Está legível (agrupamentos, rótulos)?
-5. Atualize o bloco rubric via `node tools/scorecard.mjs <slug> set-rubric '<json>'` (`overall` + `scores` por critério) — alimenta a aba Visão Geral.
-5b. **Alimente `argumentario.md`** (raiz): padrões de decisão exercitados nesta sessão que se repetem entre designs (ex.: 301 vs 302, SQL vs KV, fila vs stream) viram/atualizam entradas com a defesa curta — material de revisão pré-entrevista. Não duplique: atualize a entrada existente citando a nova sessão.
-6. Escreva `60-avaliacao.md` — **texto autocontido, legível por terceiros via link compartilhado**: sem comandos/skills/mecânica interna (regra do CLAUDE.md); próximos passos em linguagem natural:
-   - Tabela: critério · nota · resumo de uma linha.
-   - Seção por critério com evidências e lacunas.
-   - **Plano de estudo**: 3-5 itens priorizados (tema, por que importa, o que estudar/praticar).
-   - Nota geral e veredito honesto de prontidão para entrevista.
-7. **Atualize `learnings.md`** (raiz): cada lacuna relevante vira um item `aberto` (ou reforça um existente — não duplique); itens `aberto` de sessões anteriores que foram demonstrados com solidez nesta sessão são promovidos a `dominado`, citando a sessão como evidência.
-8. Se aplicável, mude `status` para `"concluido"` no `meta.json` (o `updated` as ferramentas já mantêm) e resuma o veredito na conversa. Notas infladas destroem o propósito do harness — seja rigoroso como um entrevistador sênior de verdade.
+1. Resolve the target session: the one active in the conversation; otherwise, list `sessions/*/meta.json` and ask which one to grade.
+2. **If the session was run in this conversation, use the context** — re-read only `rubric.md` and whatever wasn't covered in the conversation. In a new conversation, read all the session's files and the root `rubric.md`.
+3. Grade each of the 8 criteria 1-4. For each criterion:
+   - **Evidência**: concrete quotes/facts from the session that support the score.
+   - **Lacunas**: what an interviewer would expect and didn't show up (be specific: "didn't discuss idempotency in the consumer", not "lacked reliability").
+4. Also check the rubric's good practices (concept before tool, explicit trade-offs, operations, total cost) and the diagram: does `diagram.mmd` reflect the final design? Is it legible (grouping, labels)?
+5. Update the rubric block via `node tools/scorecard.mjs <slug> set-rubric '<json>'` (`overall` + `scores` per criterion) — feeds the Overview tab.
+5b. **Feed `argumentario.md`** (root): decision patterns exercised in this session that repeat across designs (e.g., 301 vs 302, SQL vs KV, queue vs stream) become/update entries with the short defense — pre-interview review material. Don't duplicate: update the existing entry citing the new session.
+6. Write `60-avaliacao.md` — **self-contained text, readable by third parties via the shared link**: no commands/skills/internal mechanics (the CLAUDE.md rule); next steps in natural language:
+   - Table: criterion · score · one-line summary.
+   - A section per criterion with evidence and gaps.
+   - **Study plan**: 3-5 prioritized items (topic, why it matters, what to study/practice).
+   - Overall score and an honest verdict on interview readiness.
+7. **Update `learnings.md`** (root): every relevant gap becomes an `aberto` item (or reinforces an existing one — don't duplicate); `aberto` items from previous sessions that were demonstrated solidly in this session are promoted to `dominado`, citing this session as evidence.
+8. If applicable, change `status` to `"concluido"` in `meta.json` (`updated` is already kept by the tools) and summarize the verdict in the conversation. Inflated scores defeat the purpose of the harness — be as rigorous as a real senior interviewer.

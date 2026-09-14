@@ -1,5 +1,7 @@
-// Templates das etapas de sessão — módulo compartilhado entre stage.mjs (criação)
-// e o pipeline/viewer (detecção de stub: aba laranja enquanto o template não foi tocado).
+// Session stage templates — module shared between stage.mjs (creation)
+// and the pipeline/viewer (stub detection: orange tab while the template hasn't been touched).
+// Template CONTENT stays in Portuguese on purpose: it becomes actual session
+// artifact text, and CLAUDE.md's writing rule keeps session files in Portuguese.
 export const TEMPLATES = {
   requisitos: [
     '10-requisitos.md',
@@ -124,5 +126,5 @@ _(simplificações conscientes — escala real, DR, hardening — e onde cada um
   ],
 };
 
-// filename -> conteúdo do template (para detectar stub por comparação exata)
+// filename -> template content (to detect a stub by exact comparison)
 export const TEMPLATE_BY_FILE = Object.fromEntries(Object.values(TEMPLATES));

@@ -1,16 +1,16 @@
 # Argumentário
 
-Padrões de decisão que se repetem entre designs, com a defesa curta pronta — material de revisão pré-entrevista. Alimentado a cada sessão concluída; irmão do `learnings.md` (lá vão as lacunas, aqui vão os argumentos dominados).
+Decision patterns that repeat across designs, with the short defense ready to go — pre-interview review material. Fed after every completed session; sibling of `learnings.md` (gaps go there, mastered arguments go here).
 
-Formato de cada entrada:
+Format of each entry:
 
 ```
-## <padrão de decisão> (ex.: 301 vs 302 em redirects)
-- **Quando aparece**: tipo de sistema/situação.
-- **Defesa em 30s**: a articulação pronta, com a nuance que diferencia.
-- **Visto em**: sessions/<slug> (data)
+## <decision pattern> (e.g.: 301 vs 302 in redirects)
+- **Quando aparece**: type of system/situation.
+- **Defesa em 30s**: the ready articulation, with the nuance that makes the difference.
+- **Visto em**: sessions/<slug> (date)
 ```
 
 ---
 
-_(vazio — as primeiras entradas aparecem depois da primeira sessão concluída)_
+_(empty — the first entries appear after the first completed session)_

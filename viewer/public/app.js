@@ -71,10 +71,10 @@ let mermaidSeq = 0;
 
 // abas fixas, independentes da sessão
 const GLOBAL_TABS = [
-  { id: '__rubric__', label: '📋 Rubrica', key: 'rubric' },
+  { id: '__rubric__', label: '📋 Rubric', key: 'rubric' },
   { id: '__guardrails__', label: '🛡 Guardrails', key: 'guardrails' },
-  { id: '__learnings__', label: '🧠 Aprendizados', key: 'learnings' },
-  { id: '__argumentario__', label: '💬 Argumentário', key: 'argumentario' },
+  { id: '__learnings__', label: '🧠 Learnings', key: 'learnings' },
+  { id: '__argumentario__', label: '💬 Playbook', key: 'argumentario' },
 ];
 
 // Zoom do diagrama: "ajustar" cabe na largura disponível; acima disso o diagrama
@@ -152,8 +152,8 @@ function fmtCost(n) {
 
 function renderOverview(sc) {
   if (!sc) {
-    return `<div class="empty"><p>Sem scorecard ainda — a Visão Geral é preenchida conforme o design avança
-      (SLOs e capacidade junto com os requisitos, custos conforme os componentes entram, classes de falha na revisão e notas na avaliação).</p></div>`;
+    return `<div class="empty"><p>No scorecard yet — the Overview fills in as the design progresses
+      (SLOs and capacity alongside the requirements, costs as components come in, failure classes during the review, and scores during grading).</p></div>`;
   }
   const parts = [];
 
@@ -170,9 +170,9 @@ function renderOverview(sc) {
   );
   if (items.length) {
     const total = items.reduce((s, i) => s + (typeof i.cost === 'number' ? i.cost : 0), 0);
-    cards.push(`<div class="card good"><div class="card-label">Custo total</div>
+    cards.push(`<div class="card good"><div class="card-label">Total cost</div>
       <div class="card-value">${numeric ? fmtCost(total) : '—'} <small>${esc(sc.costs.unit || '')}</small></div>
-      ${has10x ? `<div class="card-sub">≈ ${fmtCost(total10x)} em escala 10x</div>` : ''}</div>`);
+      ${has10x ? `<div class="card-sub">≈ ${fmtCost(total10x)} at 10x scale</div>` : ''}</div>`);
   }
   const g = sc.guardrails;
   if (g) {
@@ -180,14 +180,14 @@ function renderOverview(sc) {
     // público: sem vocabulário interno — "guardrails/pass/falha" vira linguagem de design
     cards.push(
       STATIC
-        ? `<div class="card ${cls}"><div class="card-label">Classes de falha revisadas</div>
-      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} aberta(s) · ${g.na ?? 0} não se aplicam</div></div>`
+        ? `<div class="card ${cls}"><div class="card-label">Failure classes reviewed</div>
+      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} open · ${g.na ?? 0} not applicable</div></div>`
         : `<div class="card ${cls}"><div class="card-label">Guardrails</div>
       <div class="card-value">${g.pass ?? 0} pass · ${g.falha ?? 0} falha · ${g.na ?? 0} n/a</div></div>`
     );
   }
   if (sc.rubric?.overall != null) {
-    cards.push(`<div class="card"><div class="card-label">Rubrica (geral)</div>
+    cards.push(`<div class="card"><div class="card-label">Rubric (overall)</div>
       <div class="card-value">${esc(sc.rubric.overall)} / 4</div></div>`);
   }
   if (cards.length) parts.push(`<div class="cards">${cards.join('')}</div>`);
@@ -199,8 +199,8 @@ function renderOverview(sc) {
   if (items.length)
     parts.push(
       table(
-        '💰 Custos por componente',
-        ['Componente', `Custo (${esc(sc.costs.unit || '')})`, ...(has10x ? ['Em 10x'] : []), 'Premissas'],
+        '💰 Costs by component',
+        ['Component', `Cost (${esc(sc.costs.unit || '')})`, ...(has10x ? ['At 10x'] : []), 'Assumptions'],
         items.map(
           (i) =>
             `<tr><td>${esc(i.component)}</td><td class="num">${fmtCost(i.cost)}</td>` +
@@ -212,25 +212,25 @@ function renderOverview(sc) {
       )
     );
   if (sc.slos?.length)
-    parts.push(table('🎯 SLOs', ['SLO', 'Alvo'], sc.slos.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.target)}</td></tr>`)));
+    parts.push(table('🎯 SLOs', ['SLO', 'Target'], sc.slos.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.target)}</td></tr>`)));
   if (sc.capacity?.length)
-    parts.push(table('📈 Capacidade', ['Dimensão', 'Valor'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
+    parts.push(table('📈 Capacity', ['Dimension', 'Value'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
   if (g?.falhas?.length)
-    parts.push(`<h2>🛡 Falhas abertas${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.falhas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
+    parts.push(`<h2>🛡 Open failures${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.falhas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
   if (sc.rubric?.scores?.length)
-    parts.push(table('📋 Rubrica', ['Critério', 'Nota'], sc.rubric.scores.map((r) => `<tr><td>${esc(r.criterio)}</td><td class="num">${esc(r.nota)} / 4</td></tr>`)));
+    parts.push(table('📋 Rubric', ['Criterion', 'Score'], sc.rubric.scores.map((r) => `<tr><td>${esc(r.criterio)}</td><td class="num">${esc(r.nota)} / 4</td></tr>`)));
   if (sc.risks?.length)
-    parts.push(`<h2>⚠️ Riscos aceitos</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
+    parts.push(`<h2>⚠️ Accepted risks</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
 
-  return `<div class="md overview">${parts.join('') || '<p class="empty">scorecard vazio</p>'}</div>`;
+  return `<div class="md overview">${parts.join('') || '<p class="empty">empty scorecard</p>'}</div>`;
 }
 
 async function renderTab() {
   const content = $('#content');
   const s = state.session;
   if (!s) {
-    content.innerHTML = `<div class="empty"><p>Nenhuma sessão ainda.</p>
-      <p>No Claude Code, rode <code>/design &lt;problema&gt;</code> ou <code>/interview</code> para começar.</p></div>`;
+    content.innerHTML = `<div class="empty"><p>No session yet.</p>
+      <p>In Claude Code, run <code>/design &lt;problem&gt;</code> or <code>/interview</code> to get started.</p></div>`;
     return;
   }
   const scrollPos = content.scrollTop;
@@ -238,7 +238,7 @@ async function renderTab() {
     content.innerHTML = renderOverview(s.scorecard);
   } else if (state.activeTab === '__diagram__') {
     if (!s.diagram) {
-      content.innerHTML = '<div class="empty"><p>Sem diagrama ainda — ele aparece aqui assim que o design começar a tomar forma.</p></div>';
+      content.innerHTML = '<div class="empty"><p>No diagram yet — it shows up here as soon as the design starts taking shape.</p></div>';
     } else {
       const comps = s.scorecard?.components || [];
       // ficha do componente: o hover responde rápido; aqui é o material de estudo
@@ -248,18 +248,18 @@ async function renderTab() {
           ? `<a class="tr-link" data-tab="40-tradeoffs.md" data-tr="${esc(c.tradeoff)}">→ trade-off ${esc(c.tradeoff)}</a>`
           : '';
         return `<div class="comp" id="comp-${norm(c.name).replace(/ /g, '-')}"><b class="comp-name">${esc(c.name)}</b>
-          ${row('O que é', c.what)}
-          ${row('Papel', c.purpose)}
-          ${row('Se falhar', c.failure)}
-          ${row('Como escala', c.scaling)}
-          ${row('Por quê', c.why)}
-          ${row('Alternativas', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
+          ${row('What it is', c.what)}
+          ${row('Role', c.purpose)}
+          ${row('If it fails', c.failure)}
+          ${row('How it scales', c.scaling)}
+          ${row('Why', c.why)}
+          ${row('Alternatives', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
       content.innerHTML = `<div class="diagram-zoom">
-          <button data-z="out" title="Diminuir">−</button>
-          <button data-z="fit" title="Caber na largura">ajustar</button>
-          <button data-z="in" title="Aumentar">+</button>
+          <button data-z="out" title="Zoom out">−</button>
+          <button data-z="fit" title="Fit to width">fit</button>
+          <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
         </div><div class="diagram-wrap"></div>${legend}`;
       try {
@@ -315,28 +315,28 @@ async function renderTab() {
   content.scrollTop = scrollPos;
 }
 
-// etapa do pipeline → [rótulo, aba correspondente]
+// pipeline stage → [label, matching tab]
 const STAGE_META = {
-  '00-problema.md': ['Problema', '00-problema.md'],
-  '10-requisitos.md': ['Requisitos', '10-requisitos.md'],
-  '20-estimativas.md': ['Estimativas', '20-estimativas.md'],
+  '00-problema.md': ['Problem', '00-problema.md'],
+  '10-requisitos.md': ['Requirements', '10-requisitos.md'],
+  '20-estimativas.md': ['Estimates', '20-estimativas.md'],
   '30-design.md': ['Design', '30-design.md'],
-  'diagram.mmd': ['Diagrama', '__diagram__'],
-  'scorecard.json': ['Visão Geral', '__overview__'],
+  'diagram.mmd': ['Diagram', '__diagram__'],
+  'scorecard.json': ['Overview', '__overview__'],
   '40-tradeoffs.md': ['Trade-offs', '40-tradeoffs.md'],
   '45-review.md': ['Review', '45-review.md'],
-  '50-operacao.md': ['Operação', '50-operacao.md'],
-  '60-avaliacao.md': ['Avaliação', '60-avaliacao.md'],
+  '50-operacao.md': ['Operations', '50-operacao.md'],
+  '60-avaliacao.md': ['Evaluation', '60-avaliacao.md'],
   '70-poc.md': ['POC/MVP', '70-poc.md'],
-  '90-duvidas.md': ['Dúvidas', '90-duvidas.md'],
+  '90-duvidas.md': ['Questions', '90-duvidas.md'],
 };
 const STATUS_TITLE = {
-  ok: 'atualizada — consistente com a última baseline',
-  editado: 'em edição — divergiu da baseline (trabalho em andamento)',
-  desatualizado: 'DESATUALIZADA — um upstream mudou e esta etapa não foi revisitada',
-  pendente: 'pendente — ainda não existe',
-  stub: 'template criado, conteúdo ainda não escrito',
-  falhas: 'review aberto — há FALHAs aguardando emenda ou registro consciente',
+  ok: 'up to date — consistent with the last baseline',
+  editado: 'being edited — diverged from the baseline (work in progress)',
+  desatualizado: 'STALE — an upstream changed and this stage wasn\'t revisited',
+  pendente: 'pending — doesn\'t exist yet',
+  stub: 'template created, content not written yet',
+  falhas: 'review open — there are FALHAs awaiting a fix or a conscious record',
 };
 
 // --- tooltip nos nós do SVG do diagrama (descrição · por quê · descartadas) ---
@@ -473,7 +473,7 @@ function renderNav() {
     }
     track = nodes.join('<span class="arrow">→</span>');
     if (!p.baseline)
-      track += '<span class="pipeline-note" title="A consistência entre etapas passa a ser rastreada após a primeira baseline (node tools/check.mjs <slug> --baseline)">sem baseline</span>';
+      track += '<span class="pipeline-note" title="Consistency between stages starts being tracked after the first baseline (node tools/check.mjs <slug> --baseline)">no baseline</span>';
   }
 
   // página compartilhada é só a sessão — documentos globais (aprendizados, argumentário...) não viajam
@@ -509,25 +509,25 @@ function renderHeader() {
   }
   sel.style.display = state.sessions.length && !STATIC ? '' : 'none';
   if (state.session?.meta?.title) {
-    // formato único "título - jonatasrenan"; o sufixo System Design Studio é só do viewer local
+    // single format "title - jonatasrenan"; the "System Design Studio" suffix is local-viewer only
     document.title = `${state.session.meta.title} - jonatasrenan${STATIC ? '' : ' System Design Studio'}`;
     if (STATIC) $('header h1').textContent = `${state.session.meta.title} - jonatasrenan`;
   }
   const badges = $('#session-badges');
   const meta = state.session?.meta || {};
   badges.innerHTML = '';
-  // "estudio" é o padrão — badge de modo só quando for a exceção informativa (simulado)
-  if (meta.mode === 'entrevista') badges.innerHTML += `<span class="badge">entrevista</span>`;
-  // página pública: "em-andamento" não aparece (ruído para o leitor externo); "concluido" fica
+  // "estudio" is the default — a mode badge only for the informative exception (mock interview)
+  if (meta.mode === 'entrevista') badges.innerHTML += `<span class="badge">interview</span>`;
+  // public page: "em-andamento" doesn't show (noise for an external reader); "concluido" stays
   if (meta.status && !(STATIC && meta.status === 'em-andamento'))
-    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status}</span>`;
+    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status === 'concluido' ? 'completed' : 'in progress'}</span>`;
   if (state.session && !STATIC) {
     if (state.shareBusy) {
-      badges.innerHTML += `<span class="badge">⏳ publicando…</span>`;
+      badges.innerHTML += `<span class="badge">⏳ publishing…</span>`;
     } else if (meta.share?.url) {
-      badges.innerHTML += `<a class="badge share" href="${meta.share.url}" target="_blank" title="design publicado — atualiza sozinho a cada mudança">🔗 compartilhado</a><button class="badge share-btn" id="unshare-btn" title="remove a página publicada do ar">✕</button>`;
+      badges.innerHTML += `<a class="badge share" href="${meta.share.url}" target="_blank" title="design published — updates itself on every change">🔗 shared</a><button class="badge share-btn" id="unshare-btn" title="takes the published page down">✕</button>`;
     } else {
-      badges.innerHTML += `<button class="badge share-btn" id="share-btn" title="publica este design num link público que atualiza sozinho">🔗 compartilhar</button>`;
+      badges.innerHTML += `<button class="badge share-btn" id="share-btn" title="publishes this design to a public link that updates itself">🔗 share</button>`;
     }
   }
   const shareCall = async (action) => {
@@ -536,10 +536,10 @@ function renderHeader() {
     try {
       const r = await fetch(`/api/session/${encodeURIComponent(state.current)}/${action}`, { method: 'POST' });
       const d = await r.json();
-      if (!r.ok) alert(d.error || 'falha ao publicar');
+      if (!r.ok) alert(d.error || 'failed to publish');
       else if (state.session) state.session.meta.share = d.share ?? undefined;
     } catch (e) {
-      alert(`falha: ${e.message}`);
+      alert(`failed: ${e.message}`);
     }
     state.shareBusy = false;
     renderHeader();
@@ -549,12 +549,12 @@ function renderHeader() {
   const ub = $('#unshare-btn');
   if (ub)
     ub.onclick = () => {
-      if (confirm('Descompartilhar? A página pública sai do ar.')) shareCall('unshare');
+      if (confirm('Unshare? The public page goes offline.')) shareCall('unshare');
     };
   const fb = $('#follow-btn');
-  // página pública: sem controle de "seguir" — é ferramenta de acompanhamento do estúdio
+  // public page: no "follow" control — that's a studio tracking tool
   if (STATIC) fb.style.display = 'none';
-  fb.textContent = state.follow ? '🔄 seguindo' : '📌 fixo';
+  fb.textContent = state.follow ? '🔄 following' : '📌 pinned';
   fb.className = state.follow ? 'on' : '';
   fb.onclick = () => {
     state.follow = !state.follow;
