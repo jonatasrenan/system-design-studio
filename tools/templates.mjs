@@ -115,7 +115,10 @@ written (the shipped examples don't carry it): to declare a state enum on an
 erDiagram attribute, name the attribute so it contains "state" and add a
 comment right after it with the possible values, lowercase, in the design's
 own language, separated by "|" (e.g. a "reserved|confirmed|expired"
-comment on a "state" attribute). Every one of those values must also exist
+comment on a "state" attribute). A long enum stretches the whole entity box in
+the render: past five or so values, put it on a comment line right below the
+attribute instead — "%% state: a|b|c" — which the lint reads the same way and
+the diagram doesn't draw. Every one of those values must also exist
 as a state in 25-domain.md's lifecycle diagram (case/accent-insensitive
 cross-file check) — this is how a mismatch between the two tabs gets caught
 instead of drifting silently. Terms under "## Vocabulary" here are matched

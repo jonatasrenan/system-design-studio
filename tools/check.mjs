@@ -579,7 +579,14 @@ function lintSession(slug) {
         if (model) {
           const lifecycleStates = new Set([...sources, ...destinations].map(normVoc));
           const modelEr = extractMermaid(model) ?? '';
-          for (const m of modelEr.matchAll(/\b(?:state|estado)\b[^\n"]*"([^"]+)"/gi))
+          // enum values come either inline (attribute comment, rendered inside the entity box)
+          // or on a `%% <attribute>: a|b|c` line right below the attribute — invisible in
+          // the render, which keeps a long enum from stretching the whole table
+          const enumDecls = [
+            ...modelEr.matchAll(/\b(?:state|estado)\b[^\n"]*"([^"]+)"/gi),
+            ...modelEr.matchAll(/^\s*%%\s*\w*(?:state|estado)\w*\s*:\s*([^\n]+?)\s*$/gim),
+          ];
+          for (const m of enumDecls)
             for (const v of m[1].split('|').map((x) => x.trim()).filter(Boolean))
               if (!lifecycleStates.has(normVoc(v)))
                 fail(
