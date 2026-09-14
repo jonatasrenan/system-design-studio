@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ORDER, OPTIONAL, stageStatus, parseDiagram, JARGON } from './pipeline.mjs';
+import { ORDER, OPTIONAL, stageStatus, parseDiagram, JARGON, stripHtmlComments } from './pipeline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -132,7 +132,7 @@ else {
   for (const f of ORDER.filter((n) => n.endsWith('.md'))) {
     const c = read(f);
     if (!c) continue;
-    for (const [i, line] of c.split('\n').entries()) if (JARGON.test(line)) leaks.push(`${f}:${i + 1}`);
+    for (const [i, line] of stripHtmlComments(c).split('\n').entries()) if (JARGON.test(line)) leaks.push(`${f}:${i + 1}`);
   }
   add(leaks.length === 0 ? 'ok' : 'fail', 'artifacts free of internal jargon (shareable)', leaks.slice(0, 5).join(', '));
 }

@@ -57,6 +57,14 @@ The first reply after the statement is **ONE numbered list of missing definition
 
 As the numbers close: a stage you'll fill **in this same turn** → `tools/stage.mjs <slug> <stages...> --print` (only prints the templates) and **Write directly** — a new file skips the Read; a stage left for later → create it without `--print` (the orange tab signals "on the way"). `20-estimativas.md` with the visible arithmetic + **ONE** `scorecard.mjs <slug> apply` via stdin/heredoc with slos and capacity together. (AskUserQuestion is still valid further on, for design decisions where the user is the one deciding — not here, where they're often relaying the interviewer.)
 
+**Dominant-risk classification, in the same turn requirements close**: `25-dominio.md` and `35-modelo-de-dados.md` sit at fixed, causal positions in the pipeline — domain (aggregate boundaries) between estimates and design, data model (which those boundaries constrain) between design and trade-offs, because an aggregate boundary IS a transaction boundary, and the transaction boundary is what decides the row grain. They're optional, but never opt-in by silence: classify the problem's dominant risk as soon as requirements close.
+- **Risk is data-shaped** (contention, uniqueness, lifecycle, data grain, or an invariant carrying the design) → propose both stages as the default **in the same turn**, `stage.mjs <slug> dominio modelo --print` + Write, and keep going — don't wait for the user to ask.
+- **Risk is something else** (latency, read volume, an external integration) → skip them, and record the dismissal as ONE line under "Decisões adiadas" in `40-tradeoffs.md`, so a blank tab always has a reason on record:
+  ```
+  - Domínio e Modelo de dados dispensados neste corte: o risco dominante é latência de leitura, não dado.
+  ```
+Absence of either stage never fails a review, not even for a completed session — but items 30-34 of the guardrails checklist go to `[premissa-a-validar]` without `25-dominio.md` to back them (the review skill's ruler for that block).
+
 ## 3. Research
 
 WebSearch when there's a real gap; record the conclusion + source. Research to decide, not to stall. When research reveals **how real systems solve it** (Uber uses H3, bit.ly uses X…), distill it into 1 line per decision in the **"Referências de mercado"** section at the end of `40-tradeoffs.md`, with a source — it's interview ammunition. Opt-in: only when the research actually happened or the user asked; never mandatory in pass 1.

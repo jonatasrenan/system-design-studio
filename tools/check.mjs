@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ORDER, hashFile, stageStatus, parseDiagram, JARGON, writeAtomic } from './pipeline.mjs';
+import { ORDER, hashFile, stageStatus, parseDiagram, JARGON, writeAtomic, stripHtmlComments } from './pipeline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSIONS_DIR = path.join(ROOT, 'sessions');
@@ -120,6 +120,49 @@ function baseline(slug, force) {
 
 // --- deterministic review lints: whatever is regex/parse stays out of the LLM and lives here ---
 const TAXONOMY = ['👤', '🌐', '🧭', '⚙️', '🗄️', '⚡', '📨', '⏱️', '📊', '🛡️', '🔌'];
+const normVoc = (s) => (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+// Markdown table lookup: finds the row whose text STARTS with headerPrefix, treats
+// the next line as the separator (skipped), and reads data rows contiguously —
+// stops at the first line that has no "|" at all, per the domain templates' contract.
+function findTable(text, headerPrefix) {
+  const lines = text.split('\n');
+  const hi = lines.findIndex((l) => l.trim().startsWith(headerPrefix));
+  if (hi < 0) return null;
+  const cellsOf = (line) => {
+    const c = line.split('|').map((x) => x.trim());
+    if (c[0] === '') c.shift();
+    if (c.at(-1) === '') c.pop();
+    return c;
+  };
+  const rows = [];
+  let i = hi + 1;
+  if (lines[i] && /^\s*\|?\s*:?-{2,}/.test(lines[i])) i++; // separator row
+  for (; i < lines.length && lines[i].includes('|'); i++) rows.push(cellsOf(lines[i]));
+  return { header: cellsOf(lines[hi]), rows, headerLine: hi };
+}
+
+// Text of a "## <heading>" section, up to (excluding) the next "## " heading.
+function extractSection(text, heading) {
+  const m = new RegExp(`^##\\s+${heading}\\s*$`, 'm').exec(text);
+  if (!m) return null;
+  const rest = text.slice(m.index + m[0].length);
+  const next = rest.search(/^##\s+/m);
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+// Content of the first ```mermaid fence in a block of text.
+const extractMermaid = (text) => /```mermaid\n([\s\S]*?)```/.exec(text ?? '')?.[1] ?? null;
+
+// stateDiagram-v2 edges: "A --> B" (labels ignored); [*] is the pseudostate, not a real state.
+function parseStateDiagram(src) {
+  const edges = [];
+  for (const raw of (src ?? '').split('\n')) {
+    const m = raw.trim().match(/^(\[\*\]|[A-Za-z0-9_]+)\s*-->\s*(\[\*\]|[A-Za-z0-9_]+)/);
+    if (m) edges.push({ from: m[1], to: m[2] });
+  }
+  return edges;
+}
 function lintSession(slug) {
   const dir = resolveDir(slug);
   if (!fs.existsSync(dir)) {
@@ -135,6 +178,7 @@ function lintSession(slug) {
   };
   const falhas = [];
   const avisos = [];
+  const naoChecados = [];
   let sc = null;
   try {
     sc = JSON.parse(read('scorecard.json'));
@@ -194,10 +238,12 @@ function lintSession(slug) {
     falhas.push('diagram.mmd missing');
   }
 
+  // HTML comments (e.g. a stage template's lint-contract header) are documentation,
+  // never artifact content — strip them before any content check, jargon included.
   for (const f of ORDER.filter((n) => n.endsWith('.md'))) {
     const c = read(f);
     if (!c) continue;
-    for (const [i, line] of c.split('\n').entries())
+    for (const [i, line] of stripHtmlComments(c).split('\n').entries())
       if (JARGON.test(line)) falhas.push(`internal jargon in ${f}:${i + 1} — artifacts are shareable`);
   }
 
@@ -208,7 +254,130 @@ function lintSession(slug) {
     if (entries > defesas) avisos.push(`${entries - defesas} trade-off(s) without "Defesa em 30s"`);
   }
 
-  const naoChecados = [];
+  // --- Domain & Modeling deterministic predicates (judge guardrails items 30-34) ---
+  {
+    const dominioRaw = read('25-dominio.md');
+    const modeloRaw = read('35-modelo-de-dados.md');
+    const dominio = dominioRaw ? stripHtmlComments(dominioRaw) : null;
+    const modelo = modeloRaw ? stripHtmlComments(modeloRaw) : null;
+    const PREVENCAO = ['prevenido no banco', 'prevenido no código', 'detectado depois', 'só coberto por teste'];
+    const isPremissa = (s) => /premissa-a-validar/i.test(s ?? '');
+
+    // [dominio-invariantes]
+    if (!dominio) {
+      naoChecados.push('dominio-invariantes — no 25-dominio.md in this session');
+    } else {
+      const table = findTable(dominio, '| ID |');
+      if (!table) naoChecados.push('dominio-invariantes — no invariants table (header starting with "| ID |") in 25-dominio.md');
+      else
+        table.rows.forEach((row, ri) => {
+          const id = row[0] ?? '';
+          if (row.some((c) => !c)) {
+            falhas.push(`dominio-invariantes: 25-dominio.md — invariant row ${ri + 1} (${id || '?'}) has an empty cell`);
+            return;
+          }
+          if (!/^INV-\d+$/.test(id)) falhas.push(`dominio-invariantes: 25-dominio.md — invariant id "${id}" doesn't match INV-n`);
+          const prevencao = row[2] ?? '';
+          if (!isPremissa(prevencao) && !PREVENCAO.some((p) => normVoc(prevencao) === normVoc(p)))
+            falhas.push(`dominio-invariantes: 25-dominio.md — "${id}" has "Prevenção" outside the fixed vocabulary: "${prevencao}"`);
+        });
+    }
+
+    // [dominio-ciclo-vida]
+    if (!dominio) {
+      naoChecados.push('dominio-ciclo-vida — no 25-dominio.md in this session');
+    } else {
+      const section = extractSection(dominio, 'Ciclo de vida');
+      const mermaidSrc = section && extractMermaid(section);
+      if (!mermaidSrc || !/stateDiagram-v2/.test(mermaidSrc)) {
+        naoChecados.push('dominio-ciclo-vida — no "## Ciclo de vida" section with a stateDiagram-v2 block in 25-dominio.md');
+      } else {
+        const edges = parseStateDiagram(mermaidSrc);
+        const sources = new Set(edges.map((e) => e.from));
+        const destinations = new Set(edges.map((e) => e.to).filter((t) => t !== '[*]'));
+        for (const state of destinations)
+          if (!sources.has(state))
+            falhas.push(
+              `dominio-ciclo-vida: 25-dominio.md — state "${state}" is a transition's destination with no outgoing edge and no [*] termination`
+            );
+        // cross-file: state enum values declared on the Model's erDiagram must all exist here
+        if (modelo) {
+          const lifecycleStates = new Set([...sources, ...destinations].map(normVoc));
+          const modeloEr = extractMermaid(modelo) ?? '';
+          for (const m of modeloEr.matchAll(/\bstate\b[^\n"]*"([^"]+)"/gi))
+            for (const v of m[1].split('|').map((x) => x.trim()).filter(Boolean))
+              if (!lifecycleStates.has(normVoc(v)))
+                falhas.push(
+                  `dominio-ciclo-vida: 35-modelo-de-dados.md declares state "${v}" that doesn't exist in 25-dominio.md's lifecycle`
+                );
+        }
+      }
+    }
+
+    // [dominio-agregados]
+    if (!dominio) {
+      naoChecados.push('dominio-agregados — no 25-dominio.md in this session');
+    } else {
+      const matches = [...dominio.matchAll(/^###\s+Agregado:\s*(.+)$/gm)];
+      if (!matches.length) {
+        naoChecados.push('dominio-agregados — no "### Agregado: <name>" heading in 25-dominio.md');
+      } else {
+        matches.forEach((m, i) => {
+          const name = m[1].trim();
+          const start = m.index + m[0].length;
+          const end = i + 1 < matches.length ? matches[i + 1].index : dominio.length;
+          const body = dominio.slice(start, end);
+          if (!/cardinalidade/i.test(body)) falhas.push(`dominio-agregados: 25-dominio.md — "Agregado: ${name}" doesn't mention cardinality`);
+          if (!/INV-\d+/.test(body) && !/justificad/i.test(body))
+            avisos.push(`dominio-agregados: 25-dominio.md — "Agregado: ${name}" cites no INV-n and doesn't say the boundary is justified`);
+        });
+      }
+    }
+
+    // [dominio-vocabulario]
+    if (!dominio) {
+      naoChecados.push('dominio-vocabulario — no 25-dominio.md in this session');
+    } else {
+      const ctxSection = extractSection(dominio, 'Contextos');
+      const declaredContexts = ctxSection
+        ? [...ctxSection.matchAll(/^-\s*(.+)$/gm)].map((m) => m[1].split(/[—:-]/)[0].trim()).filter(Boolean)
+        : [];
+      const vocabTable = findTable(dominio, '| Termo |');
+      if (!declaredContexts.length || !vocabTable) {
+        naoChecados.push('dominio-vocabulario — no "## Contextos" list or no vocabulary table in 25-dominio.md');
+      } else {
+        const ownersWithTerms = new Set();
+        for (const row of vocabTable.rows) {
+          const owner = row[1] ?? '';
+          ownersWithTerms.add(normVoc(owner));
+          if (!declaredContexts.some((c) => normVoc(c) === normVoc(owner)))
+            falhas.push(`dominio-vocabulario: 25-dominio.md — vocabulary owner "${owner}" is not a declared context`);
+        }
+        for (const c of declaredContexts)
+          if (!ownersWithTerms.has(normVoc(c)))
+            falhas.push(`dominio-vocabulario: 25-dominio.md — context "${c}" has no term in the vocabulary table`);
+      }
+    }
+
+    // [dominio-modelo-vocabulario] — the Model's vocabulary must match the Domain's
+    if (!dominio || !modelo) {
+      naoChecados.push('dominio-modelo-vocabulario — needs both 25-dominio.md and 35-modelo-de-dados.md');
+    } else {
+      const domVocab = findTable(dominio, '| Termo |');
+      const modVocab = findTable(modelo, '| Termo |');
+      if (!domVocab || !modVocab) {
+        naoChecados.push('dominio-modelo-vocabulario — vocabulary table missing in one of the two files');
+      } else {
+        const domTerms = new Set(domVocab.rows.map((r) => normVoc(r[0])));
+        for (const row of modVocab.rows) {
+          const term = row[0] ?? '';
+          if (term && !domTerms.has(normVoc(term)))
+            falhas.push(`dominio-modelo-vocabulario: 35-modelo-de-dados.md — term "${term}" doesn't match 25-dominio.md's vocabulary`);
+        }
+      }
+    }
+  }
+
   // guardrails closed sum: pass+falha+na+premissas+riscos must equal the checklist size in
   // guardrails.md — an item nobody has judged yet can't silently disappear from the count.
   {

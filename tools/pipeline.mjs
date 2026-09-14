@@ -10,7 +10,9 @@ export const ORDER = [
   '00-problema.md',
   '10-requisitos.md',
   '20-estimativas.md',
+  '25-dominio.md',
   '30-design.md',
+  '35-modelo-de-dados.md',
   '40-tradeoffs.md',
   '50-operacao.md',
   'diagram.mmd',
@@ -21,11 +23,24 @@ export const ORDER = [
   '60-avaliacao.md',
 ];
 
-// optional stages: absence never fails the check (not even in a completed session)
-export const OPTIONAL = ['70-poc.md', '90-duvidas.md'];
+// optional stages: absence never fails the check (not even in a completed session).
+// 25-dominio.md and 35-modelo-de-dados.md sit in causal DAG position (aggregate
+// boundary decides transaction boundary, transaction boundary decides row grain)
+// but are only proposed by default when the dominant risk of the session is
+// data-shaped — see the design skill.
+export const OPTIONAL = ['25-dominio.md', '35-modelo-de-dados.md', '70-poc.md', '90-duvidas.md'];
 
 export const hashFile = (p) =>
   crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 16);
+
+// Strips HTML comments from markdown text before it's parsed as artifact content —
+// a comment (e.g. a stage template's lint-contract header) is documentation for
+// whoever edits the file, not part of the design doc. Keeps line numbers stable:
+// characters inside a comment are blanked out, not removed, so a line that was
+// entirely a comment becomes an empty line rather than vanishing.
+export function stripHtmlComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '));
+}
 
 // Internal jargon that must not leak into shareable artifacts (see CLAUDE.md).
 // "baseline" alone is a legitimate technical term — only command forms and internal names count.
