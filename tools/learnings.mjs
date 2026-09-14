@@ -1,4 +1,4 @@
-// SAFE writing to the global memory files (learnings.md / padroes.md). These are
+// SAFE writing to the global memory files (learnings.md / patterns.md). These are
 // the only shared state between sessions that the flow writes to. With several
 // agents in parallel, editing by text (Read → Edit) becomes a concurrent
 // read-modify-write and loses items. Here the write happens under a lock (atomic
@@ -7,16 +7,16 @@
 // the expected format in the message, never written half-formed.
 //
 // Usage:
-//   node tools/learnings.mjs append [--target learnings|padroes] [--session <slug>]
+//   node tools/learnings.mjs append [--target learnings|patterns] [--session <slug>]
 //       ← stdin: one or more markdown items starting with "## <title>" (the target's
 //         format — see FORMAT_HELP below). An item missing a required field is
 //         refused (nothing written); items whose "## <title>" already exists
 //         are skipped (with a warning) — to reinforce an existing item use `note`; to
 //         promote it use `promote`.
 //   node tools/learnings.mjs promote "<exact title>" --session <slug>
-//       changes **Status** to dominado and notes the session that proved it in **Origem**
+//       changes **Status** to mastered and notes the session that proved it in **Origin**
 //   node tools/learnings.mjs note "<exact title>" "<text>" [--target ...]
-//       appends " · <text>" to the end of the **Origem**/**Visto em** line
+//       appends " · <text>" to the end of the **Origin**/**Seen in** line
 //   [--file <path>] overrides the target (tests); [--quiet] only prints errors.
 // Always idempotent by title; never rewrites existing items beyond the field requested.
 import fs from 'node:fs';
@@ -37,38 +37,42 @@ const [cmd, a1, a2] = positional;
 const quiet = args.includes('--quiet');
 const target = opt('--target') ?? 'learnings';
 const session = opt('--session');
-const FILES = { learnings: 'learnings.md', padroes: 'padroes.md' };
+const FILES = { learnings: 'learnings.md', patterns: 'patterns.md' };
 if (!cmd || !['append', 'promote', 'note'].includes(cmd) || !FILES[target]) {
-  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|padroes] [--session <slug>]');
+  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|patterns] [--session <slug>]');
   process.exit(1);
 }
 
 // Required fields per target, and the format shown to whoever gets refused.
+// Each field lists its accepted spellings: English first (what the tool writes
+// and documents) and the pre-migration Portuguese one, so an item written before
+// the migration keeps validating instead of being refused as malformed.
 const REQUIRED_FIELDS = {
-  learnings: ['Status', 'Origem', 'Aprendizado', 'Como aplicar'],
-  padroes: ['Escolha', 'Quando muda', 'Defesa em 30s', 'Visto em'],
+  learnings: [['Status'], ['Origin', 'Origem'], ['Learning', 'Aprendizado'], ['How to apply', 'Como aplicar']],
+  patterns: [['Choice', 'Escolha'], ['When it changes', 'Quando muda'], ['30s defense', 'Defesa em 30s'], ['Seen in', 'Visto em']],
 };
 const FORMAT_HELP = {
   learnings: `## <short theme>
-- **Status**: aberto | dominado
-- **Origem**: sessions/<slug> (date)
-- **Aprendizado**: what became clear, in 1-3 sentences
-- **Como aplicar**: practical trigger for next time`,
-  padroes: `## <decision pattern>
-- **Escolha**: what was chosen
-- **Quando muda**: what would flip the decision
-- **Defesa em 30s**: the ready articulation, with the nuance that makes the difference
-- **Visto em**: sessions/<slug> (date)`,
+- **Status**: open | mastered
+- **Origin**: sessions/<slug> (date)
+- **Learning**: what became clear, in 1-3 sentences
+- **How to apply**: practical trigger for next time`,
+  patterns: `## <decision pattern>
+- **Choice**: what was chosen
+- **When it changes**: what would flip the decision
+- **30s defense**: the ready articulation, with the nuance that makes the difference
+- **Seen in**: sessions/<slug> (date)`,
 };
 // Missing fields for a block, or null if it's valid (or the target isn't validated).
 function missingFields(block, tgt) {
   const required = REQUIRED_FIELDS[tgt];
   if (!required) return null;
-  const missing = required.filter((f) => !new RegExp(`^-\\s*\\*\\*${f.replace(/\s/g, '\\s+')}\\*\\*:\\s*\\S`, 'm').test(block));
+  const fieldRe = (names) => new RegExp(`^-\\s*\\*\\*(?:${names.map((f) => f.replace(/\s/g, '\\s+')).join('|')})\\*\\*:\\s*\\S`, 'm');
+  const missing = required.filter((names) => !fieldRe(names).test(block)).map((names) => names[0]);
   if (missing.length) return missing;
   if (tgt === 'learnings') {
     const m = block.match(/^-\s*\*\*Status\*\*:\s*(.+)$/m);
-    if (m && !/^(aberto|dominado)\s*$/.test(m[1].trim())) return ['Status (must be exactly "aberto" or "dominado")'];
+    if (m && !/^(open|mastered|aberto|dominado)\s*$/.test(m[1].trim())) return ['Status (must be exactly "open" or "mastered")'];
   }
   return null;
 }
@@ -76,7 +80,7 @@ ensureMemoryFiles(ROOT);
 const file = opt('--file') ? path.resolve(opt('--file')) : path.join(ROOT, FILES[target]);
 const log = (...m) => !quiet && console.log(...m);
 const today = new Date().toISOString().slice(0, 10);
-const origem = session ? `sessions/${session} (${today})` : `(${today})`;
+const origin = session ? `sessions/${session} (${today})` : `(${today})`;
 
 // --- lock: mkdir is atomic on the filesystem; an orphaned lock (> 60s) is removed ---
 const lockDir = `${file}.lock`;
@@ -168,24 +172,24 @@ await withLock(() => {
       process.exit(1);
     }
     const blocks = [];
-    const vistos = new Set(); // a duplicate WITHIN the same payload is also a duplicate
+    const seen = new Set(); // a duplicate WITHIN the same payload is also a duplicate
     for (const it of newItems) {
-      if (vistos.has(norm(it.title))) {
+      if (seen.has(norm(it.title))) {
         log(`repeated in the same submission (skipped): ${it.title}`);
         continue;
       }
-      vistos.add(norm(it.title));
+      seen.add(norm(it.title));
       if (existing.has(norm(it.title))) {
         log(`already exists (skipped): ${it.title} — use note/promote to reinforce it`);
         continue;
       }
       let block = newLines.slice(it.start, it.end).join('\n').trimEnd();
-      // auto-fill Origem/Visto em from --session when the block didn't bring one —
+      // auto-fill Origin/Seen in from --session when the block didn't bring one —
       // BEFORE validating, since that's what lets a caller omit it when --session is given
-      if (session && target === 'learnings' && !/\*\*Origem\*\*/.test(block))
-        block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origem**: ${origem}`);
-      if (session && target === 'padroes' && !/\*\*Visto em\*\*/.test(block))
-        block += `\n- **Visto em**: ${origem}`;
+      if (session && target === 'learnings' && !/\*\*(Origin|Origem)\*\*/.test(block))
+        block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origin**: ${origin}`);
+      if (session && target === 'patterns' && !/\*\*(Seen in|Visto em)\*\*/.test(block))
+        block += `\n- **Seen in**: ${origin}`;
       const missing = missingFields(block, target);
       if (missing) {
         console.error(
@@ -196,11 +200,11 @@ await withLock(() => {
       blocks.push(block);
     }
     if (!blocks.length) return log('nothing to append');
-    // remove the empty-file placeholder (padroes.md is born with it)
-    let out = md.replace(/^_\(vazio[^\n]*\)_\s*$/m, '').replace(/\s+$/, '');
+    // remove the empty-file placeholder (patterns.md is born with it)
+    let out = md.replace(/^_\((vazio|empty)[^\n]*\)_\s*$/m, '').replace(/\s+$/, '');
     out = `${out}\n\n${blocks.join('\n\n')}\n`;
     writeAtomic(file, out);
-    log(`${path.basename(file)}: ${blocks.length} item(s) appended${session ? ` (origin ${origem})` : ''}`);
+    log(`${path.basename(file)}: ${blocks.length} item(s) appended${session ? ` (origin ${origin})` : ''}`);
     return;
   }
 
@@ -217,20 +221,20 @@ await withLock(() => {
       console.error('item has no **Status** line');
       process.exit(1);
     }
-    if (/dominado/.test(block[si])) log(`already dominado: ${it.title}`);
-    block[si] = block[si].replace(/:\s*.*$/, ': dominado');
-    const oi = idx(/^-\s*\*\*Origem\*\*:/);
-    const nota = `comprovado em ${origem}`;
-    if (oi >= 0 && !block[oi].includes(nota)) block[oi] = `${block[oi].trimEnd()} · ${nota}`;
-    log(`promoted: ${it.title} (${nota})`);
+    if (/mastered|dominado/.test(block[si])) log(`already mastered: ${it.title}`);
+    block[si] = block[si].replace(/:\s*.*$/, ': mastered');
+    const oi = idx(/^-\s*\*\*(Origin|Origem)\*\*:/);
+    const note = `proven in ${origin}`;
+    if (oi >= 0 && !block[oi].includes(note)) block[oi] = `${block[oi].trimEnd()} · ${note}`;
+    log(`promoted: ${it.title} (${note})`);
   } else {
     if (!a2) {
       console.error('note: provide the text');
       process.exit(1);
     }
-    const oi = idx(/^-\s*\*\*(Origem|Visto em)\*\*:/);
+    const oi = idx(/^-\s*\*\*(Origin|Seen in|Origem|Visto em)\*\*:/);
     if (oi < 0) {
-      console.error('item has no **Origem**/**Visto em** line');
+      console.error('item has no **Origin**/**Seen in** line');
       process.exit(1);
     }
     if (block[oi].includes(a2)) return log(`note already present: ${it.title}`);

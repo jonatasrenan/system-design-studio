@@ -71,7 +71,7 @@ fs.writeFileSync(
   path.join(dir, 'meta.json'),
   JSON.stringify(
     // uuid: the design's permanent identity — becomes the public path if it's ever shared
-    { title, status: 'em-andamento', created: today, updated: today, uuid: crypto.randomUUID() },
+    { title, status: 'in-progress', created: today, updated: today, uuid: crypto.randomUUID() },
     null,
     2
   ) + '\n'
@@ -84,7 +84,7 @@ fs.writeFileSync(
       slos: [],
       capacity: [],
       components: [],
-      costs: { unit: 'USD/mês', items: [] },
+      costs: { unit: 'USD/month', items: [] },
       guardrails: null,
       risks: [],
     },
@@ -97,7 +97,7 @@ fs.writeFileSync(
 //  a stub would only have cost a Read-before-Write)
 
 console.log(slug);
-console.log('created: meta.json, scorecard.json — 00-problema.md and the stages do NOT exist yet (Write directly, no Read)');
+console.log('created: meta.json, scorecard.json — 00-problem.md and the stages do NOT exist yet (Write directly, no Read)');
 
 // --- viewer: made sure to be up, without a separate call from the agent ---
 loadEnv(ROOT);
@@ -122,7 +122,7 @@ if (noViewer) {
   }
 }
 
-// --- open learnings + padrões: delivered here, no separate Reads ---
+// --- open learnings + patterns: delivered here, no separate Reads ---
 ensureMemoryFiles(ROOT);
 const readRoot = (n) => {
   try {
@@ -133,30 +133,32 @@ const readRoot = (n) => {
 };
 const learnings = readRoot('learnings.md').replace(/```[\s\S]*?```/g, '');
 let missingStatus = 0;
-const abertos = [...learnings.matchAll(/^##\s+(.+)$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/gm)]
+// "aberto" is the pre-migration spelling of "open": both are read, so a memory
+// file written before the migration keeps delivering its open items.
+const open_ = [...learnings.matchAll(/^##\s+(.+)$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/gm)]
   .filter(([, , body]) => {
     const m = body.match(/\*\*Status\*\*:\s*(\S+)/);
     if (!m) {
       missingStatus++;
       return true; // no Status line at all: safe default is OPEN, never silently dropped
     }
-    return m[1] === 'aberto';
+    return m[1] === 'open' || m[1] === 'aberto';
   })
   .map(([, title, body]) => {
-    const como = body.match(/\*\*Como aplicar\*\*:\s*(.+)/)?.[1] ?? '';
-    return `- ${title.trim()}${como ? ` — ${como.trim()}` : ''}`;
+    const how = body.match(/\*\*(?:How to apply|Como aplicar)\*\*:\s*(.+)/)?.[1] ?? '';
+    return `- ${title.trim()}${how ? ` — ${how.trim()}` : ''}`;
   });
 // bracketed by two count lines so a caller that truncates this output (e.g. piping
 // through `head`) can tell — the counts must match, or something got cut.
-console.log(`\n--- ${abertos.length} learnings abertos (active alerts for this session — do not truncate this output) ---`);
-console.log(abertos.length ? abertos.join('\n') : '(none)');
-console.log(`--- end of ${abertos.length} learnings ---`);
+console.log(`\n--- ${open_.length} open learnings (active alerts for this session — do not truncate this output) ---`);
+console.log(open_.length ? open_.join('\n') : '(none)');
+console.log(`--- end of ${open_.length} learnings ---`);
 if (missingStatus)
-  console.error(`warning: ${missingStatus} learnings.md item(s) missing a **Status** line (normalize: add "- **Status**: aberto" or "dominado") — treated as open`);
+  console.error(`warning: ${missingStatus} learnings.md item(s) missing a **Status** line (normalize: add "- **Status**: open" or "mastered") — treated as open`);
 // only the entries (`## …`), never the header nor the format block
 const entriesOf = (raw) => [...raw.replace(/```[\s\S]*?```/g, '').matchAll(/^##\s[\s\S]*?(?=^##\s|\s*$(?![\s\S]))/gm)].map(([e]) => e.trim());
-const padroes = entriesOf(readRoot('padroes.md'));
-if (padroes.length) {
-  console.log(`\n--- padrões (decisions already resolved, with the defense ready — don't re-discuss from scratch) ---`);
-  console.log(padroes.join('\n\n'));
+const patterns = entriesOf(readRoot('patterns.md'));
+if (patterns.length) {
+  console.log(`\n--- patterns (decisions already resolved, with the defense ready — don't re-discuss from scratch) ---`);
+  console.log(patterns.join('\n\n'));
 }

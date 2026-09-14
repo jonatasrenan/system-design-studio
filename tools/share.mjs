@@ -28,9 +28,9 @@ const DIST_ID = process.env.SD_SHARE_DIST || '';
 const BASE_URL = (process.env.SD_SHARE_BASE || '').replace(/\/+$/, '');
 const AWS_ENV = { ...process.env, AWS_DEFAULT_REGION: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' };
 const requireEnv = () => {
-  const faltando = [!BUCKET && 'SD_SHARE_BUCKET', !BASE_URL && 'SD_SHARE_BASE'].filter(Boolean);
-  if (faltando.length) {
-    console.error(`sharing not configured: set ${faltando.join(' and ')} (see README)`);
+  const missingEnv = [!BUCKET && 'SD_SHARE_BUCKET', !BASE_URL && 'SD_SHARE_BASE'].filter(Boolean);
+  if (missingEnv.length) {
+    console.error(`sharing not configured: set ${missingEnv.join(' and ')} (see README)`);
     process.exit(1);
   }
 };
@@ -167,7 +167,7 @@ const buildAt = new Date().toISOString();
 const appHash = crypto.createHash('sha1').update(appJs).update(css).digest('hex').slice(0, 12);
 
 const html = `<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex"/>

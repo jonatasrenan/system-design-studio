@@ -5,7 +5,7 @@
 //
 // Preferred command (merges several blocks in ONE call):
 //   apply  '{"components":[...],"costs":[...],"slos":[...],"capacity":[...],
-//            "risks":[...],"guardrails":{...},"unit":"USD/mês"}'
+//            "risks":[...],"guardrails":{...},"unit":"USD/month"}'
 //   (all keys optional; components/costs/slos/capacity upsert,
 //    risks appends with dedupe, guardrails replaces, unit adjusts costs.unit)
 //
@@ -15,7 +15,7 @@
 //   upsert-slos       '[{"name","target"}]'                                       (key: name)
 //   upsert-capacity   '[{"name","value"}]'                                        (key: name)
 //   add-risks         '["risk text"]'                                             (append, exact dedupe)
-//   set-guardrails    '{"pass","falha","na","premissas"?,"riscos"?,"falhas":[]}'   (premissas/riscos default 0)
+//   set-guardrails    '{"pass","fail","na","premises"?,"accepted_risks"?,"failures":[]}'  (premises/accepted_risks default 0)
 //   remove-components '["name1","name2"]'   remove-costs    '["component1"]'
 //   remove-slos       '["name1"]'           remove-capacity '["name1"]'
 //   remove-risks      '["exact risk text"]'
@@ -45,7 +45,7 @@ const SKELETON = {
   slos: [],
   capacity: [],
   components: [],
-  costs: { unit: 'USD/mês', items: [] },
+  costs: { unit: 'USD/month', items: [] },
   guardrails: null,
   risks: [],
 };
@@ -106,14 +106,14 @@ function upsert(list, items, key) {
   return `${added} added, ${updated} updated`;
 }
 
-// premissas/riscos are optional (default 0) so old scorecards without them stay valid;
+// premises/accepted_risks are optional (default 0) so old scorecards without them stay valid;
 // when present they must be numbers ≥ 0, like the other three counters.
 const validGuardrails = (p) =>
   p &&
-  ['pass', 'falha', 'na'].every((k) => typeof p[k] === 'number') &&
-  ['premissas', 'riscos'].every((k) => p[k] === undefined || (typeof p[k] === 'number' && p[k] >= 0)) &&
-  Array.isArray(p.falhas ?? []);
-const normalizeGuardrails = (p) => ({ premissas: 0, riscos: 0, ...p });
+  ['pass', 'fail', 'na'].every((k) => typeof p[k] === 'number') &&
+  ['premises', 'accepted_risks'].every((k) => p[k] === undefined || (typeof p[k] === 'number' && p[k] >= 0)) &&
+  Array.isArray(p.failures ?? []);
+const normalizeGuardrails = (p) => ({ premises: 0, accepted_risks: 0, ...p });
 const stringArray = (p) => Array.isArray(p) && p.every((x) => typeof x === 'string');
 
 function addRisks(arr) {
@@ -131,7 +131,7 @@ switch (cmd) {
     const known = ['components', 'costs', 'slos', 'capacity', 'risks', 'guardrails', 'unit'];
     const unknown = Object.keys(payload).filter((k) => !known.includes(k));
     if (unknown.length) fail(`unknown blocks in apply: ${unknown.join(', ')} (accepted: ${known.join(', ')})`);
-    sc.costs ??= { unit: 'USD/mês', items: [] };
+    sc.costs ??= { unit: 'USD/month', items: [] };
     if (payload.unit) {
       sc.costs.unit = payload.unit;
       summaries.push(`unit: ${payload.unit}`);
@@ -147,10 +147,10 @@ switch (cmd) {
     if (payload.risks) summaries.push(`risks: ${addRisks(payload.risks)}`);
     if (payload.guardrails) {
       if (!validGuardrails(payload.guardrails))
-        fail('malformed guardrails: {pass,falha,na:numbers, premissas?,riscos?:numbers >= 0, falhas:[...]}');
+        fail('malformed guardrails: {pass,fail,na:numbers, premises?,accepted_risks?:numbers >= 0, failures:[...]}');
       sc.guardrails = normalizeGuardrails(payload.guardrails);
       summaries.push(
-        `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
+        `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.fail} fail · ${sc.guardrails.premises} premise(s) · ${sc.guardrails.accepted_risks} accepted risk(s)`
       );
     }
     if (!summaries.length) fail('apply with no blocks — nothing to do');
@@ -160,7 +160,7 @@ switch (cmd) {
     summaries.push(`components: ${upsert(sc.components, payload, 'name')}`);
     break;
   case 'upsert-costs':
-    sc.costs ??= { unit: 'USD/mês', items: [] };
+    sc.costs ??= { unit: 'USD/month', items: [] };
     summaries.push(`costs: ${upsert(sc.costs.items, payload, 'component')}`);
     break;
   case 'upsert-slos':
@@ -174,10 +174,10 @@ switch (cmd) {
     break;
   case 'set-guardrails':
     if (!validGuardrails(payload))
-      fail('malformed guardrails: {pass,falha,na:numbers, premissas?,riscos?:numbers >= 0, falhas:[...]}');
+      fail('malformed guardrails: {pass,fail,na:numbers, premises?,accepted_risks?:numbers >= 0, failures:[...]}');
     sc.guardrails = normalizeGuardrails(payload);
     summaries.push(
-      `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.na} n/a · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
+      `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.fail} fail · ${sc.guardrails.na} n/a · ${sc.guardrails.premises} premise(s) · ${sc.guardrails.accepted_risks} accepted risk(s)`
     );
     break;
   case 'remove-components':
