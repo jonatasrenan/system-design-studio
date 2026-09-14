@@ -13,6 +13,8 @@ node viewer/server.mjs        # panel at http://localhost:4400 (PORT changes the
 claude                        # in another terminal, at the repo root
 ```
 
+`http://localhost:4400/check.html` renders every diagram of every session (the map and each `mermaid` fence in the stages) with the panel's configuration and lists what fails to parse — the one class of defect the lint, which reads the source, can't see.
+
 New to the studio? **[WORKFLOW.md](WORKFLOW.md)** is the end-to-end usage guide: a diagram of the whole flow, a step-by-step of what to say and what to expect, and a table of "signs you're off the rails and what to do".
 
 The commands below are skills in `.claude/skills/`: they become available by running `claude` from this repository's root (and trusting the directory when it asks), together with the instructions in `CLAUDE.md` and the consistency hook in `.claude/settings.json`.
