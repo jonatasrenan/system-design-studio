@@ -43,8 +43,8 @@ header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   color: var(--muted);
   margin-right: 4px;
 }
-.badge.status-concluido { color: var(--ok); border-color: var(--ok); }
-.badge.status-em-andamento { color: var(--warn); border-color: var(--warn); }
+.badge.status-done { color: var(--ok); border-color: var(--ok); }
+.badge.status-in-progress { color: var(--warn); border-color: var(--warn); }
 #live-dot { margin-left: auto; color: var(--ok); font-size: 11px; }
 #live-dot.off { color: #ef4444; }
 
@@ -87,7 +87,7 @@ button.stage.dismissed { border-style: dashed; cursor: default; opacity: 0.7; co
 button.stage.dismissed .dot { background: var(--accent); }
 button.stage.stub { border-color: color-mix(in srgb, #f97316 60%, var(--border)); color: #fdba74; }
 button.stage.stub .dot { background: #f97316; }
-/* review com FALHAs abertas: vermelho fixo (sem pulsar — pulso é do "desatualizado") */
+/* review with open FAILs: solid red (no pulse — pulsing belongs to "stale") */
 button.stage.falhas { border-color: #ef4444; color: #fca5a5; }
 button.stage.falhas .dot { background: #ef4444; }
 button.stage.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); border-color: var(--accent); }

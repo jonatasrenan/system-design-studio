@@ -13,7 +13,7 @@ node viewer/server.mjs        # panel at http://localhost:4400 (PORT changes the
 claude                        # in another terminal, at the repo root
 ```
 
-New to the studio? **[FLUXO.md](FLUXO.md)** is the end-to-end usage guide: a diagram of the whole flow, a step-by-step of what to say and what to expect, and a table of "signs you're off the rails and what to do".
+New to the studio? **[WORKFLOW.md](WORKFLOW.md)** is the end-to-end usage guide: a diagram of the whole flow, a step-by-step of what to say and what to expect, and a table of "signs you're off the rails and what to do".
 
 The commands below are skills in `.claude/skills/`: they become available by running `claude` from this repository's root (and trusting the directory when it asks), together with the instructions in `CLAUDE.md` and the consistency hook in `.claude/settings.json`.
 
@@ -32,15 +32,15 @@ You can also just talk in natural language ("let's design a URL shortener") — 
 | Path | Role |
 |---|---|
 | `sessions/<slug>/` | One directory per design: numbered `.md` files (become tabs), `diagram.mmd` (Mermaid, single source for the design), `scorecard.json` (executive panel), `meta.json` |
-| `guardrails.md` | 34-item checklist across three blocks (failure classes, data & contract, domain & modeling); five verdicts (PASS/FALHA/N-A/premise-to-validate/accepted-risk); no design concludes with an open failure |
-| `learnings.template.md` | Seed for the memory of recurring mistakes (from `aberto` to `dominado`), which feeds back into the next sessions |
-| `padroes.template.md` | Seed for decisions already resolved across designs, each with the short defense ready |
+| `guardrails.md` | 34-item checklist across three blocks (failure classes, data & contract, domain & modeling); five verdicts (PASS/FAIL/N-A/premise-to-validate/accepted-risk); no design concludes with an open failure |
+| `learnings.template.md` | Seed for the memory of recurring mistakes (from `open` to `mastered`), which feeds back into the next sessions |
+| `patterns.template.md` | Seed for decisions already resolved across designs, each with the short defense ready |
 | `tools/` | Deterministic mechanical IO: session and stage creation, scorecard patching, consistency checking |
 | `viewer/` | Node server with a file watcher + SSE, and the panel's front end |
 | `.env.example` | Seed for personal configuration (bucket, distribution, AWS profile, port) |
 | `CLAUDE.md` | The instructions that drive the agent: phases, propagation protocol, writing rules |
 
-**What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md` and `padroes.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can build on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
+**What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md` and `patterns.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can build on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
 
 ## Two pieces that deserve an explanation
 

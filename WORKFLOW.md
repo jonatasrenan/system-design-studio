@@ -22,11 +22,11 @@ flowchart TD
   M --> L
   L -->|"'let's go deeper'"| N["Pass 2<br/>(full sheets, operations, cost at 10x)"]
   N --> O["/review skill<br/>(full mode)"]
-  O --> P{"FALHA<br/>open?"}
-  P -->|yes| Q["fix, defer to Decisões<br/>adiadas, or accept as risk"]
+  O --> P{"FAIL<br/>open?"}
+  P -->|yes| Q["fix, defer to Deferred<br/>decisions, or accept as risk"]
   Q --> O
   P -->|no| R["'be the mesa'<br/>/mesa skill (optional)"]
-  R --> S(("status: concluido"))
+  R --> S(("status: done"))
   E --> F
 ```
 
@@ -55,7 +55,7 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 4. **Pass 1.**
    Say: nothing — this runs automatically once requirements close.
    Pilot does: estimates, the request's story, the diagram, and the scorecard, all in the same turn, going deep only on the 1-2 dominant risks.
-   You see: Estimates, Design, Diagram, and Overview tabs light up; everything cut for later shows up as one-line entries under "Decisões adiadas" in Trade-offs.
+   You see: Estimates, Design, Diagram, and Overview tabs light up; everything cut for later shows up as one-line entries under "Deferred decisions" in Trade-offs.
    Get the most: check the Diagram tab first — it's the fastest way to sanity-check the shape of what got built, and hovering a node shows its sheet (role, cost, failure mode).
 
 5. **Light close and first baseline.**
@@ -72,7 +72,7 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 
 7. **A premise changes.**
    Say: "actually, assume 10x the peak load" (or any requirement change, at any point).
-   Pilot does: follows the propagation protocol in order — edits only the upstream file, runs `node tools/check.mjs <slug>` and treats its downstream list as the roadmap, works through every file on it (recomputing, or confirming in writing with `--baseline --nota "..."` that it's unaffected), only then records a new baseline.
+   Pilot does: follows the propagation protocol in order — edits only the upstream file, runs `node tools/check.mjs <slug>` and treats its downstream list as the roadmap, works through every file on it (recomputing, or confirming in writing with `--baseline --note "..."` that it's unaffected), only then records a new baseline.
    You see: the tab strip pulses red for anything stale, clearing again once propagation finishes.
    Get the most: if a tab stays red for more than a turn, ask what's blocking it — that's the protocol's checkpoint working, not a bug.
 
@@ -84,9 +84,9 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 
 9. **Full review.**
    Say: "review this design" (it also runs automatically before a session can conclude).
-   Pilot does: the `/review` skill's full mode — every one of the 34 guardrails items gets a verdict, `check.mjs --lint`'s findings fold straight in, and each open FALHA gets one concrete fix proposed for you to validate, veto, or accept as a conscious risk.
-   You see: the Review tab turns solid once every FALHA is addressed or accepted; the Overview's Guardrails card shows the final PASS/FALHA/N-A/premise/risk counts.
-   Get the most: vetoing a fix leaves the item FALHA — accepting it as a risk is a separate, explicit step (it needs an entry in Overview's risks list and a recorded decision in Trade-offs, or it's still just an open FALHA).
+   Pilot does: the `/review` skill's full mode — every one of the 34 guardrails items gets a verdict, `check.mjs --lint`'s findings fold straight in, and each open FAIL gets one concrete fix proposed for you to validate, veto, or accept as a conscious risk.
+   You see: the Review tab turns solid once every FAIL is addressed or accepted; the Overview's Guardrails card shows the final PASS/FAIL/N-A/premise/risk counts.
+   Get the most: vetoing a fix leaves the item FAIL — accepting it as a risk is a separate, explicit step (it needs an entry in Overview's risks list and a recorded decision in Trade-offs, or it's still just an open FAIL).
 
 10. **Rehearse the defense (optional).**
     Say: "be the mesa" / "I want to rehearse this".
@@ -96,8 +96,8 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 
 11. **Conclude.**
     Say: nothing explicit — it happens once the guardrails are clean.
-    Pilot does: sets `status: "concluido"` in the session.
-    You see: a green "concluido" badge in the header.
+    Pilot does: sets `status: "done"` in the session.
+    You see: a green "done" badge in the header.
     Get the most: a concluded session is still a plain directory of files — reread it later, diff it against a newer design, or hand a reviewer the shared link.
 
 ## Signs you're off the rails, and what to do
@@ -106,17 +106,17 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 |---|---|---|
 | Orange tab | The stage still has the untouched template — it's queued, not started | Normal mid-session; if it lingers past the phase it belongs to, ask the pilot to fill it |
 | Red, pulsing tab | An upstream file changed and this one wasn't revisited yet | Run `node tools/check.mjs <slug>` — it lists exactly what's pending, in DAG order |
-| Review tab red but not pulsing | The guardrails have an open FALHA | Ask for the review's verdicts; validate, veto, or accept each FALHA as a risk |
+| Review tab red but not pulsing | The guardrails have an open FAIL | Ask for the review's verdicts; validate, veto, or accept each FAIL as a risk |
 | A turn won't end / the hook complains | `check.mjs --hook` found propagation still pending | Read its message — it names the files; work through them and `--baseline` |
-| `check.mjs --lint` prints FALHAs/avisos | A deterministic defect in the diagram, scorecard, or trade-offs | Read the `[id]` in the message; `node tools/check.mjs --regras` explains exactly what each one requires |
+| `check.mjs --lint` prints FAILs/warnings | A deterministic defect in the diagram, scorecard, or trade-offs | Read the `[id]` in the message; `node tools/check.mjs --rules` explains exactly what each one requires |
 | Internal jargon shows up in a tab | A command, skill name, or file name ("harness", "check.mjs", "scorecard.json"...) leaked into a `.md` | Ask the pilot to rephrase — session files have to read standalone for a third party |
 | Chat keeps asking permission to continue | The pilot is stalling instead of proposing a default and moving on | Say "default" or "go ahead" — the house rule is: propose and proceed, ask only for real open decisions |
-| A mitigation sized for more failure than the numbers could ever produce | The design over-engineers relative to its own estimates | Ask "does this match what we estimated?" — `[capacity]`/`[numeros]` in `--lint` catch some of this mechanically |
-| A "Defesa em 30s" that doesn't cite this design's numbers | The trade-off reads like it was copied from a different system | Ask for the specific number backing the claim; a number with no unit-backed trace to estimates/requirements is what `[numeros]` flags |
+| A mitigation sized for more failure than the numbers could ever produce | The design over-engineers relative to its own estimates | Ask "does this match what we estimated?" — `[capacity]`/`[numbers]` in `--lint` catch some of this mechanically |
+| A "30s defense" that doesn't cite this design's numbers | The trade-off reads like it was copied from a different system | Ask for the specific number backing the claim; a number with no unit-backed trace to estimates/requirements is what `[numbers]` flags |
 
 ## For maintainers
 
 - **`/harness-eval` evaluates the harness, not the design** — `node tools/eval.mjs <slug>` (deterministic layer) plus a semantic judge reading the artifacts, optionally against a golden session (`--golden <dir>`). Run it after any change to a skill, a template, or a lint predicate.
 - **Hooks**: `.claude/settings.json`'s Stop hook runs `node tools/check.mjs --hook` at the end of every turn — it's what makes the propagation protocol non-optional instead of a suggestion.
-- **Memory**: `learnings.md` (recurring mistakes) and `padroes.md` (decisions already resolved) are personal and gitignored, but the mechanism that reads and writes them (`tools/learnings.mjs`, `tools/new-session.mjs`) is versioned and tested like any other tool.
+- **Memory**: `learnings.md` (recurring mistakes) and `patterns.md` (decisions already resolved) are personal and gitignored, but the mechanism that reads and writes them (`tools/learnings.mjs`, `tools/new-session.mjs`) is versioned and tested like any other tool.
 - **What's mechanical is the tool's, never hand-typed by the LLM**: session skeletons, stage templates, scorecard patches, and consistency checks all go through `tools/*.mjs`. If you catch the pilot typing out a JSON blob or a file skeleton by hand instead of calling a tool, that's a bug in the skill instructing it, not a one-off mistake to route around.

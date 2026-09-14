@@ -59,7 +59,7 @@ const $ = (s) => document.querySelector(s);
 const state = {
   sessions: [],
   learnings: '',
-  padroes: '',
+  patterns: '',
   guardrails: '',
   current: null,
   session: null,
@@ -72,7 +72,7 @@ let mermaidSeq = 0;
 const GLOBAL_TABS = [
   { id: '__guardrails__', label: '🛡 Guardrails', key: 'guardrails' },
   { id: '__learnings__', label: '🧠 Learnings', key: 'learnings' },
-  { id: '__padroes__', label: '🧩 Patterns', key: 'padroes' },
+  { id: '__patterns__', label: '🧩 Patterns', key: 'patterns' },
 ];
 
 // Zoom do diagrama: "ajustar" cabe na largura disponível; acima disso o diagrama
@@ -174,22 +174,22 @@ function renderOverview(sc) {
   }
   const g = sc.guardrails;
   if (g) {
-    const cls = g.falha > 0 ? 'bad' : '';
-    const premissas = g.premissas ?? 0;
-    const riscos = g.riscos ?? 0;
+    const cls = g.fail > 0 ? 'bad' : '';
+    const premises = g.premises ?? 0;
+    const acceptedRisks = g.accepted_risks ?? 0;
     // extra states shown only when in use — premises/accepted risks don't count against the design,
     // so they get the same neutral visual treatment as "n/a", never the "bad" one
-    const extra = [premissas ? `${premissas} to validate` : '', riscos ? `${riscos} accepted risk(s)` : '']
+    const extra = [premises ? `${premises} to validate` : '', acceptedRisks ? `${acceptedRisks} accepted risk(s)` : '']
       .filter(Boolean)
       .join(' · ');
-    // public page: no internal vocabulary — "guardrails/pass/falha" becomes design language
+    // public page: no internal vocabulary — "guardrails/pass/fail" becomes design language
     cards.push(
       STATIC
         ? `<div class="card ${cls}"><div class="card-label">Failure classes reviewed</div>
-      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} open · ${g.na ?? 0} not applicable</div>
+      <div class="card-value">${g.pass ?? 0} ok · ${g.fail ?? 0} open · ${g.na ?? 0} not applicable</div>
       ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
         : `<div class="card ${cls}"><div class="card-label">Guardrails</div>
-      <div class="card-value">${g.pass ?? 0} pass · ${g.falha ?? 0} falha · ${g.na ?? 0} n/a</div>
+      <div class="card-value">${g.pass ?? 0} pass · ${g.fail ?? 0} fail · ${g.na ?? 0} n/a</div>
       ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
     );
   }
@@ -218,8 +218,8 @@ function renderOverview(sc) {
     parts.push(table('🎯 SLOs', ['SLO', 'Target'], sc.slos.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.target)}</td></tr>`)));
   if (sc.capacity?.length)
     parts.push(table('📈 Capacity', ['Dimension', 'Value'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
-  if (g?.falhas?.length)
-    parts.push(`<h2>🛡 Open failures${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.falhas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
+  if (g?.failures?.length)
+    parts.push(`<h2>🛡 Open failures${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.failures.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
   if (sc.risks?.length)
     parts.push(`<h2>⚠️ Accepted risks</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
 
@@ -306,7 +306,7 @@ async function renderTab() {
     }
   } else if (GLOBAL_TABS.some((t) => t.id === state.activeTab)) {
     const tab = GLOBAL_TABS.find((t) => t.id === state.activeTab);
-    content.innerHTML = `<div class="md">${marked.parse(state[tab.key] || '_vazio_')}</div>`;
+    content.innerHTML = `<div class="md">${marked.parse(state[tab.key] || '_empty_')}</div>`;
     await renderMermaidIn(content);
   } else {
     const file = s.files.find((f) => f.name === state.activeTab);
@@ -318,19 +318,19 @@ async function renderTab() {
 
 // pipeline stage → [label, matching tab]
 const STAGE_META = {
-  '00-problema.md': ['Problem', '00-problema.md'],
-  '10-requisitos.md': ['Requirements', '10-requisitos.md'],
-  '20-estimativas.md': ['Estimates', '20-estimativas.md'],
-  '25-dominio.md': ['Domain', '25-dominio.md'],
+  '00-problem.md': ['Problem', '00-problem.md'],
+  '10-requirements.md': ['Requirements', '10-requirements.md'],
+  '20-estimates.md': ['Estimates', '20-estimates.md'],
+  '25-domain.md': ['Domain', '25-domain.md'],
   '30-design.md': ['Design', '30-design.md'],
-  '35-modelo-de-dados.md': ['Data Model', '35-modelo-de-dados.md'],
+  '35-data-model.md': ['Data Model', '35-data-model.md'],
   'diagram.mmd': ['Diagram', '__diagram__'],
   'scorecard.json': ['Overview', '__overview__'],
   '40-tradeoffs.md': ['Trade-offs', '40-tradeoffs.md'],
   '45-review.md': ['Review', '45-review.md'],
-  '50-operacao.md': ['Operations', '50-operacao.md'],
+  '50-operations.md': ['Operations', '50-operations.md'],
   '70-poc.md': ['POC/MVP', '70-poc.md'],
-  '90-duvidas.md': ['Questions', '90-duvidas.md'],
+  '90-faq.md': ['Questions', '90-faq.md'],
 };
 const STATUS_TITLE = {
   ok: 'up to date — consistent with the last baseline',
@@ -338,7 +338,7 @@ const STATUS_TITLE = {
   desatualizado: 'STALE — an upstream changed and this stage wasn\'t revisited',
   pendente: 'pending — doesn\'t exist yet',
   stub: 'template created, content not written yet',
-  falhas: 'review open — there are FALHAs awaiting a fix or a conscious record',
+  falhas: 'review open — there are FAILs awaiting a fix or a conscious record',
 };
 
 // --- tooltip nos nós do SVG do diagrama (descrição · por quê · descartadas) ---
@@ -443,21 +443,22 @@ const FILE_TO_TAB = (name) => {
 };
 
 // navegação única: pipeline da sessão + documentos globais
-// A missing optional stage (25-dominio.md, 35-modelo-de-dados.md) that was a
-// conscious call, not an oversight, has a line under "## Decisões adiadas" in
-// 40-tradeoffs.md naming it and saying "dispensad[a/o]" — same convention the
-// [adiadas] lint uses server-side. Returns that line, or null.
-const DISMISS_KEYWORDS = { '25-dominio.md': /dom[íi]nio/i, '35-modelo-de-dados.md': /modelo/i };
+// A missing optional stage (25-domain.md, 35-data-model.md) that was a
+// conscious call, not an oversight, has a line under "## Deferred decisions" in
+// 40-tradeoffs.md naming it and saying "dismissed" ("dispensad[a/o]" in a
+// Portuguese session) — same convention the [deferred] lint uses server-side.
+// Returns that line, or null.
+const DISMISS_KEYWORDS = { '25-domain.md': /dom[íi]nio|domain/i, '35-data-model.md': /modelo|model/i };
 function dismissedReason(stageName, files) {
   const kw = DISMISS_KEYWORDS[stageName];
   if (!kw) return null;
   const tradeoffs = files.find((f) => f.name === '40-tradeoffs.md');
   if (!tradeoffs) return null;
-  const m = tradeoffs.content.match(/^##\s+Decisões adiadas\s*$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/m);
+  const m = tradeoffs.content.match(/^##\s+(?:Deferred decisions|Decisões adiadas)\s*$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/m);
   if (!m) return null;
   for (const raw of m[1].split('\n')) {
     const line = raw.trim();
-    if (/^-\s/.test(line) && kw.test(line) && /dispensad/i.test(line)) return line.replace(/^-\s*/, '');
+    if (/^-\s/.test(line) && kw.test(line) && /dispensad|dismissed/i.test(line)) return line.replace(/^-\s*/, '');
   }
   return null;
 }
@@ -547,9 +548,9 @@ function renderHeader() {
   const badges = $('#session-badges');
   const meta = state.session?.meta || {};
   badges.innerHTML = '';
-  // public page: "em-andamento" doesn't show (noise for an external reader); "concluido" stays
-  if (meta.status && !(STATIC && meta.status === 'em-andamento'))
-    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status === 'concluido' ? 'completed' : 'in progress'}</span>`;
+  // public page: "in-progress" doesn't show (noise for an external reader); "done" stays
+  if (meta.status && !(STATIC && meta.status === 'in-progress'))
+    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status === 'done' ? 'completed' : 'in progress'}</span>`;
   if (state.session && !STATIC) {
     if (state.shareBusy) {
       badges.innerHTML += `<span class="badge">⏳ publishing…</span>`;
@@ -599,14 +600,14 @@ async function load(keepSession = true) {
     ? {
         sessions: [{ slug: window.__DATA__.slug, title: window.__DATA__.meta?.title ?? 'design' }],
         learnings: '',
-        padroes: '',
+        patterns: '',
         guardrails: '',
       }
     : await (await fetch('/api/sessions')).json();
   if (seq !== loadSeq) return; // resposta atrasada de um load antigo — descarta
   state.sessions = data.sessions;
   state.learnings = data.learnings;
-  state.padroes = data.padroes;
+  state.patterns = data.patterns;
   state.guardrails = data.guardrails;
   const fromHash = decodeURIComponent(location.hash.slice(1));
   if (state.follow) {
@@ -629,7 +630,7 @@ async function load(keepSession = true) {
     if (STATIC && !state.loadedOnce) {
       // pública: a PRIMEIRA carga sempre abre no Problema — leitura começa do início.
       // O acompanhamento ao vivo (pular para a etapa ativa) vale só para atualizações seguintes.
-      if (state.session.files.some((f) => f.name === '00-problema.md')) state.activeTab = '00-problema.md';
+      if (state.session.files.some((f) => f.name === '00-problem.md')) state.activeTab = '00-problem.md';
     } else {
       // ...e a etapa que a conversa acabou de tocar
       const tab = FILE_TO_TAB(state.session.lastChanged);

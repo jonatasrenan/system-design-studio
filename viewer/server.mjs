@@ -106,7 +106,7 @@ function readSession(slug) {
   }
 }
 
-const ROOT_DOCS = ['learnings.md', 'padroes.md', 'guardrails.md'];
+const ROOT_DOCS = ['learnings.md', 'patterns.md', 'guardrails.md'];
 function readRootDoc(name) {
   const p = path.join(ROOT, name);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
@@ -184,7 +184,7 @@ const server = http.createServer((req, res) => {
     return json(res, 200, {
       sessions: listSessions(),
       learnings: readRootDoc('learnings.md'),
-      padroes: readRootDoc('padroes.md'),
+      patterns: readRootDoc('patterns.md'),
       guardrails: readRootDoc('guardrails.md'),
     });
   if (req.method !== 'POST' && url.pathname.startsWith('/api/session/')) {
