@@ -14,7 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadEnv } from './pipeline.mjs';
+import { loadEnv, RETIRED_STAGES } from './pipeline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv(ROOT);
@@ -119,7 +119,7 @@ if (!meta.share || meta.share.url !== shareUrl) {
 // --- collecting the session's data ---
 const files = fs
   .readdirSync(dir)
-  .filter((f) => f.endsWith('.md'))
+  .filter((f) => f.endsWith('.md') && !RETIRED_STAGES.includes(f))
   .sort()
   .map((name) => ({ name, content: fs.readFileSync(path.join(dir, name), 'utf8') }));
 const diagram = fs.existsSync(path.join(dir, 'diagram.mmd')) ? fs.readFileSync(path.join(dir, 'diagram.mmd'), 'utf8') : null;
@@ -130,11 +130,12 @@ try {
 // --- payload identical to the viewer's /api/session (the shared page IS the panel) ---
 const { stageStatus } = await import('./pipeline.mjs');
 // same criterion as the viewer: scorecard.json is excluded from "last changed file",
-// otherwise the page would jump to the Overview on every scorecard update
+// otherwise the page would jump to the Overview on every scorecard update — and a
+// retired stage's leftover file (old clone, stray manual write) never counts either
 let lastChanged = null;
 let lastMtime = 0;
 for (const f of fs.readdirSync(dir)) {
-  if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.')) continue;
+  if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.') || RETIRED_STAGES.includes(f)) continue;
   try {
     const m = fs.statSync(path.join(dir, f)).mtimeMs;
     if (m > lastMtime) {

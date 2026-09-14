@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stageStatus, ensureMemoryFiles, loadEnv } from '../tools/pipeline.mjs';
+import { stageStatus, ensureMemoryFiles, loadEnv, RETIRED_STAGES } from '../tools/pipeline.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -74,7 +74,7 @@ function readSession(slug) {
   try {
     const files = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.md'))
+      .filter((f) => f.endsWith('.md') && !RETIRED_STAGES.includes(f))
       .sort()
       .map((name) => ({ name, content: fs.readFileSync(path.join(dir, name), 'utf8') }));
     const diagramPath = path.join(dir, 'diagram.mmd');
@@ -85,11 +85,12 @@ function readSession(slug) {
     } catch {}
     // the CONTENT file modified last — the frontend's "follow" mode opens its tab.
     // scorecard.json is excluded: it's a side artifact updated alongside the content —
-    // following it would make the panel jump to the Overview on every apply.
+    // following it would make the panel jump to the Overview on every apply. A retired
+    // stage's file (an old clone, a stray manual write) never becomes "last changed" either.
     let lastChanged = null;
     let lastMtime = 0;
     for (const f of fs.readdirSync(dir)) {
-      if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.')) continue;
+      if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.') || RETIRED_STAGES.includes(f)) continue;
       try {
         const m = fs.statSync(path.join(dir, f)).mtimeMs;
         if (m > lastMtime) {

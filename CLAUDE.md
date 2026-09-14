@@ -68,7 +68,7 @@ sessions/<yyyy-mm-dd>-<slug>/
 |---|---|
 | Create session (full setup: skeleton + viewer + learnings/argumentário on stdout) | `node tools/new-session.mjs "<title>" --mode estudio\|entrevista [--slug <slug>] [--no-viewer]` → line 1 is the slug |
 | Create stages from template (several per call) | `node tools/stage.mjs <slug> <stage> [<stage>...] [--print]` (requisitos\|estimativas\|dominio\|design\|modelo\|tradeoffs\|operacao\|duvidas\|poc; `--print` only prints the template, for a direct Write) |
-| Any scorecard write (prefer multi-block `apply` via stdin) | `node tools/scorecard.mjs <slug> apply` ← stdin `{"components":[…],"costs":[…],"slos":[…],"capacity":[…],"risks":[…],"guardrails":{…},"rubric":{…}}` (granular commands `upsert-*`/`set-*`/`add-risks` still work) |
+| Any scorecard write (prefer multi-block `apply` via stdin) | `node tools/scorecard.mjs <slug> apply` ← stdin `{"components":[…],"costs":[…],"slos":[…],"capacity":[…],"risks":[…],"guardrails":{…},"rubric":{…}}` (granular commands `upsert-*`/`set-*`/`add-risks` still work; `remove-components`/`remove-costs`/`remove-slos`/`remove-capacity`/`remove-risks` drop a superseded entry — a revised number replaces the old one, it never sits next to it) |
 | Consistency / baseline (validates before recording; prints the latest `--nota` when called without flags) | `node tools/check.mjs [<slug>] [--baseline] [--force] [--nota "<text>"]` |
 | Deterministic review lints (diagram↔scorecard coverage, queues, numbering, jargon, budget…) | `node tools/check.mjs <slug> --lint` |
 | List every lint predicate (id, requirement, output) — the single source of truth, never read the code to find out | `node tools/check.mjs --regras` |

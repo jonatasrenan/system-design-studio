@@ -454,6 +454,25 @@ const FILE_TO_TAB = (name) => {
 };
 
 // navegação única: pipeline da sessão + documentos globais
+// A missing optional stage (25-dominio.md, 35-modelo-de-dados.md) that was a
+// conscious call, not an oversight, has a line under "## Decisões adiadas" in
+// 40-tradeoffs.md naming it and saying "dispensad[a/o]" — same convention the
+// [adiadas] lint uses server-side. Returns that line, or null.
+const DISMISS_KEYWORDS = { '25-dominio.md': /dom[íi]nio/i, '35-modelo-de-dados.md': /modelo/i };
+function dismissedReason(stageName, files) {
+  const kw = DISMISS_KEYWORDS[stageName];
+  if (!kw) return null;
+  const tradeoffs = files.find((f) => f.name === '40-tradeoffs.md');
+  if (!tradeoffs) return null;
+  const m = tradeoffs.content.match(/^##\s+Decisões adiadas\s*$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/m);
+  if (!m) return null;
+  for (const raw of m[1].split('\n')) {
+    const line = raw.trim();
+    if (/^-\s/.test(line) && kw.test(line) && /dispensad/i.test(line)) return line.replace(/^-\s*/, '');
+  }
+  return null;
+}
+
 function renderNav() {
   const el = $('#pipeline');
   const s = state.session;
@@ -473,9 +492,19 @@ function renderNav() {
       if (enabled) clickable.add(tabId);
       const active = tabId === state.activeTab ? ' active' : '';
       // stub (laranja) só cede para "desatualizado" — o alerta vermelho tem prioridade
-      const cls = st.status === 'desatualizado' ? 'desatualizado' : st.stub ? 'stub' : st.status;
+      let cls = st.status === 'desatualizado' ? 'desatualizado' : st.stub ? 'stub' : st.status;
+      let title = `${st.name}: ${STATUS_TITLE[cls]}`;
+      // an optional stage that never got a file BUT has a recorded dismissal reads
+      // as a conscious call, not a forgotten tab — distinct dashed style, reason on hover
+      if (st.status === 'pendente') {
+        const reason = dismissedReason(st.name, s.files);
+        if (reason) {
+          cls = 'dismissed';
+          title = `${st.name}: dismissed with reason — "${reason}"`;
+        }
+      }
       return `<button class="stage ${cls}${active}" data-tab="${enabled ? tabId : ''}"
-        title="${st.name}: ${STATUS_TITLE[cls]}" ${enabled ? '' : 'disabled'}>
+        title="${esc(title)}" ${enabled ? '' : 'disabled'}>
         <span class="dot"></span>${label}</button>`;
     });
     // arquivos avulsos fora do pipeline viram nós neutros no fim

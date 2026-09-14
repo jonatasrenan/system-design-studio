@@ -81,6 +81,10 @@ button.stage.editado .dot { background: var(--warn); }
 button.stage.desatualizado { border-color: #ef4444; color: #fca5a5; }
 button.stage.desatualizado .dot { background: #ef4444; animation: pulse 1.4s ease-in-out infinite; }
 button.stage.pendente { border-style: dashed; cursor: default; opacity: 0.55; }
+/* optional stage never opened, but with a recorded reason in Decisões adiadas — a
+   conscious call, distinct from a plain forgotten "pendente" tab */
+button.stage.dismissed { border-style: dashed; cursor: default; opacity: 0.7; color: var(--accent); }
+button.stage.dismissed .dot { background: var(--accent); }
 button.stage.stub { border-color: color-mix(in srgb, #f97316 60%, var(--border)); color: #fdba74; }
 button.stage.stub .dot { background: #f97316; }
 /* review com FALHAs abertas: vermelho fixo (sem pulsar — pulso é do "desatualizado") */

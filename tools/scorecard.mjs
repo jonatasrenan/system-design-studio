@@ -17,7 +17,11 @@
 //   add-risks         '["risk text"]'                                             (append, exact dedupe)
 //   set-guardrails    '{"pass","falha","na","premissas"?,"riscos"?,"falhas":[]}'   (premissas/riscos default 0)
 //   set-rubric        '{"overall","scores":[{"criterio","nota"}]}'
-//   remove-components '["name1","name2"]'   remove-costs '["component1"]'
+//   remove-components '["name1","name2"]'   remove-costs    '["component1"]'
+//   remove-slos       '["name1"]'           remove-capacity '["name1"]'
+//   remove-risks      '["exact risk text"]'
+//   (a revised number replaces the old one — remove the superseded entry
+//    instead of letting it sit next to the new one)
 //
 // Always updates meta.updated. Prints a summary of what changed.
 import fs from 'node:fs';
@@ -198,6 +202,21 @@ switch (cmd) {
     if (!stringArray(payload)) fail('remove-costs expects a list of components');
     sc.costs.items = sc.costs.items.filter((c) => !payload.includes(c.component));
     summaries.push('costs removed');
+    break;
+  case 'remove-slos':
+    if (!stringArray(payload)) fail('remove-slos expects a list of names');
+    sc.slos = sc.slos.filter((s) => !payload.includes(s.name));
+    summaries.push('slos removed');
+    break;
+  case 'remove-capacity':
+    if (!stringArray(payload)) fail('remove-capacity expects a list of names');
+    sc.capacity = sc.capacity.filter((c) => !payload.includes(c.name));
+    summaries.push('capacity removed');
+    break;
+  case 'remove-risks':
+    if (!stringArray(payload)) fail('remove-risks expects a list of risk strings (exact match)');
+    sc.risks = sc.risks.filter((r) => !payload.includes(r));
+    summaries.push('risks removed');
     break;
   default:
     fail(`unknown command: ${cmd}`);
