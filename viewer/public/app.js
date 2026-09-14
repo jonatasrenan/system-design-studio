@@ -96,6 +96,80 @@ function edgeLegendHtml(src) {
   </div>`;
 }
 
+// Full labels, placed by us: the layout runs with number-only edge labels (tight),
+// then each edge's text is drawn at a different point along its own path — 38%,
+// 62%, 28%… — skipping spots that collide with a node or with a label already
+// placed. Labels stop sharing one horizontal band, which is what made the map wide.
+function overlayEdgeLabels(svg, src) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const edges = edgeList(src);
+  svg.querySelectorAll('.edge-note').forEach((e) => e.remove());
+  const boxes = [];
+  for (const g of svg.querySelectorAll('g.node')) {
+    const t = (g.getAttribute('transform') || '').match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+    const bb = g.getBBox();
+    if (t) boxes.push({ x: +t[1] + bb.x - 4, y: +t[2] + bb.y - 4, w: bb.width + 8, h: bb.height + 8 });
+  }
+  const overlaps = (a, b) => !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
+  const wrap = (t, max) => {
+    const out = [];
+    let cur = '';
+    for (const w of t.split(/\s+/)) {
+      if ((cur + ' ' + w).trim().length > max && cur) {
+        out.push(cur);
+        cur = w;
+      } else cur = (cur + ' ' + w).trim();
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  const paths = [...svg.querySelectorAll('path.flowchart-link')];
+  const fs = 11;
+  paths.forEach((p, i) => {
+    const cls = p.className.baseVal;
+    const from = (cls.match(/LS-([A-Za-z0-9_]+)/) || [])[1];
+    const to = (cls.match(/LE-([A-Za-z0-9_]+)/) || [])[1];
+    const e = edges[i] && edges[i].from === from && edges[i].to === to ? edges[i] : edges.find((x) => x.from === from && x.to === to);
+    if (!e || !e.text) return;
+    const lines = wrap(e.text, 24);
+    const w = Math.max(...lines.map((l) => l.length)) * fs * 0.56 + 10;
+    const h = lines.length * (fs + 3) + 6;
+    const L = p.getTotalLength();
+    let best = null;
+    // the step number sits at the midpoint — start beside it, not on it
+    for (const t of [0.38, 0.62, 0.28, 0.72, 0.18, 0.82, 0.5, 0.1, 0.9]) {
+      const pt = p.getPointAtLength(L * t);
+      const box = { x: pt.x - w / 2, y: pt.y - h / 2, w, h };
+      if (!boxes.some((b) => overlaps(b, box))) {
+        best = box;
+        break;
+      }
+    }
+    if (!best) {
+      const pt = p.getPointAtLength(L * 0.5);
+      best = { x: pt.x - w / 2, y: pt.y - h / 2, w, h };
+    }
+    boxes.push(best);
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', `edge-note${e.dashed ? ' dashed' : ''}`);
+    g.dataset.from = from;
+    g.dataset.to = to;
+    const rect = document.createElementNS(NS, 'rect');
+    for (const [k, v] of Object.entries({ x: best.x, y: best.y, width: w, height: h, rx: 3 })) rect.setAttribute(k, v);
+    g.appendChild(rect);
+    lines.forEach((ln, k) => {
+      const tx = document.createElementNS(NS, 'text');
+      tx.setAttribute('x', best.x + w / 2);
+      tx.setAttribute('y', best.y + 4 + (k + 1) * (fs + 3) - 3);
+      tx.setAttribute('text-anchor', 'middle');
+      tx.setAttribute('font-size', fs);
+      tx.textContent = ln;
+      g.appendChild(tx);
+    });
+    svg.appendChild(g);
+  });
+}
+
 async function renderFlowchart(id, src, { direction } = {}) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
   if (isFlowchart && direction) src = withDirection(src, direction);
@@ -349,7 +423,7 @@ async function renderTab() {
       const labelsPref = diagramLabelsPref();
       content.innerHTML = `<div class="diagram-zoom">
           <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
-          <button data-labels title="Edge labels: auto keeps only the step numbers on the map when the full labels would make it too wide; the text goes to the legend below">labels: ${labelsPref}</button>
+          <button data-labels title="Edge labels — auto: layout with step numbers only, full text placed along each edge; full: the layout engine places every label (wide); list: step numbers on the map, text in a legend below">labels: ${labelsPref}</button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
@@ -362,7 +436,7 @@ async function renderTab() {
         renderTab();
       };
       content.querySelector('[data-labels]').onclick = () => {
-        const next = { auto: 'full', full: 'compact', compact: 'auto' }[labelsPref];
+        const next = { auto: 'full', full: 'list', list: 'auto' }[labelsPref];
         try {
           localStorage.setItem(DIAGRAM_LABELS_KEY, next);
         } catch {}
@@ -370,20 +444,13 @@ async function renderTab() {
       };
       try {
         const wrap = content.querySelector('.diagram-wrap');
-        let { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, labelsPref === 'compact' ? compactEdgeLabels(s.diagram) : s.diagram, { direction: dir });
-        let compact = labelsPref === 'compact';
-        if (labelsPref === 'auto') {
-          // too wide to read at fit-to-width → compact labels + legend
-          const probe = document.createElement('div');
-          probe.innerHTML = svg;
-          const natural = probe.querySelector('svg')?.viewBox?.baseVal?.width || 0;
-          if (natural > (wrap.clientWidth || 1200) * 1.8) {
-            ({ svg } = await renderFlowchart(`mm-${++mermaidSeq}`, compactEdgeLabels(s.diagram), { direction: dir }));
-            compact = true;
-          }
-        }
+        // 'full' lets the layout engine place every label; the other two modes lay out
+        // with step numbers only and add the text afterwards (along the edges, or as a list)
+        const src = labelsPref === 'full' ? s.diagram : compactEdgeLabels(s.diagram);
+        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src, { direction: dir });
         wrap.innerHTML = svg;
-        content.querySelector('.edge-legend-slot').innerHTML = compact ? edgeLegendHtml(s.diagram) : '';
+        content.querySelector('.edge-legend-slot').innerHTML = labelsPref === 'list' ? edgeLegendHtml(s.diagram) : '';
+        if (labelsPref === 'auto') overlayEdgeLabels(wrap.querySelector('svg'), s.diagram);
         setupDiagramZoom(content, wrap);
         // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
         wrap.querySelectorAll('.edgePaths').forEach((ep) => {
