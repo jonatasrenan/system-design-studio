@@ -567,6 +567,11 @@ function lintSession(slug) {
         notChecked('domain-lifecycle', 'no "## Lifecycle" section with a stateDiagram-v2 block in 25-domain.md');
       } else {
         const edges = parseStateDiagram(mermaidSrc);
+        // Mermaid reads everything after the first ":" as the label and stops parsing at
+        // a second one ("at 00:00") — the whole diagram then fails to render
+        for (const raw of mermaidSrc.split('\n'))
+          if (/-->\s*[^:\n]+:\s*[^\n]*:/.test(raw))
+            fail('domain-lifecycle', `25-domain.md — transition label contains a second ":" (Mermaid parse error): "${raw.trim()}"`);
         const sources = new Set(edges.map((e) => e.from));
         const destinations = new Set(edges.map((e) => e.to).filter((t) => t !== '[*]'));
         for (const state of destinations)
