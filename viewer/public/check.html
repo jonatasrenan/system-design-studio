@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mermaid check — every diagram in every session</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    main { max-width: 1000px; margin: 0 auto; padding: 24px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; vertical-align: top; }
+    td.ok { color: var(--ok); }
+    td.bad { color: #fca5a5; }
+    pre { white-space: pre-wrap; font-size: 12px; margin: 4px 0 0; color: var(--muted); }
+    .summary { margin: 10px 0 18px; }
+  </style>
+  <script src="/vendor/mermaid.min.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Mermaid check</h1>
+    <p class="summary" id="summary">Rendering every diagram (the main map, plus every <code>```mermaid</code> fence in every stage) of every session with the panel's configuration…</p>
+    <table id="out"><thead><tr><th>Session</th><th>File</th><th>Type</th><th>Result</th></tr></thead><tbody></tbody></table>
+  </main>
+  <script>
+    // Same configuration as app.js: the only thing this page checks is whether Mermaid
+    // parses and renders each block — the failure that a lint reading the source can't see
+    // (a second ":" in a state label, an unbalanced bracket, a stray character).
+    const BASE = {
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      flowchart: { useMaxWidth: true, htmlLabels: true, wrappingWidth: 160, nodeSpacing: 28, rankSpacing: 44, padding: 8 },
+      elk: { mergeEdges: true, nodePlacementStrategy: 'BRANDES_KOEPF' },
+      er: { useMaxWidth: true, fontSize: 12, entityPadding: 12, minEntityWidth: 90, minEntityHeight: 50, layoutDirection: 'TB' },
+    };
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    (async () => {
+      const tbody = document.querySelector('#out tbody');
+      const { sessions } = await fetch('/api/sessions').then((r) => r.json());
+      let total = 0, bad = 0, k = 0;
+      for (const { slug } of sessions) {
+        const s = await fetch(`/api/session/${encodeURIComponent(slug)}`).then((r) => r.json());
+        const blocks = [];
+        if (s.diagram) blocks.push({ file: 'diagram.mmd', src: s.diagram });
+        for (const f of s.files || [])
+          for (const m of String(f.content || '').matchAll(/```mermaid\n([\s\S]*?)```/g)) blocks.push({ file: f.name, src: m[1] });
+        for (const b of blocks) {
+          const type = b.src.trim().split(/\s/)[0];
+          const isFlow = /^\s*(flowchart|graph)\b/.test(b.src);
+          mermaid.initialize({ ...BASE, flowchart: { ...BASE.flowchart, defaultRenderer: isFlow ? 'elk' : 'dagre-wrapper' } });
+          total++;
+          let cell;
+          try {
+            await mermaid.render(`chk-${++k}`, b.src);
+            cell = `<td class="ok">ok</td>`;
+          } catch (e) {
+            bad++;
+            cell = `<td class="bad">error<pre>${esc(String(e.message || e).split('\n').slice(0, 4).join('\n'))}</pre></td>`;
+          }
+          tbody.insertAdjacentHTML('beforeend', `<tr><td>${esc(slug)}</td><td>${esc(b.file)}</td><td>${esc(type)}</td>${cell}</tr>`);
+        }
+      }
+      document.getElementById('summary').textContent = `${total} block(s) in ${sessions.length} session(s) — ${bad ? `${bad} failing` : 'all render'}.`;
+      document.title = `Mermaid check — ${bad ? `${bad} failing` : 'all render'}`;
+    })();
+  </script>
+</body>
+</html>
