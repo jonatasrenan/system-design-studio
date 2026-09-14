@@ -170,6 +170,67 @@ function overlayEdgeLabels(svg, src) {
   });
 }
 
+// Default mode: the map carries only the step numbers; the full text of an edge
+// shows up when the pointer is over the line (or its number), with that edge lit
+// and the rest dimmed — the same tooltip the nodes use. A wide invisible stroke
+// over each path makes a 1px line hoverable.
+function attachEdgeTooltips(container, src) {
+  const edges = edgeList(src);
+  if (!edges.length) return;
+  if (!tipEl) {
+    tipEl = document.createElement('div');
+    tipEl.id = 'node-tip';
+    document.body.appendChild(tipEl);
+  }
+  const names = nodeNames(src);
+  const paths = [...container.querySelectorAll('path.flowchart-link')];
+  const labels = [...container.querySelectorAll('.edgeLabels > g')];
+  const allPaths = [...container.querySelectorAll('.edgePaths path')];
+  const place = (e) => {
+    const pad = 14;
+    const w = tipEl.offsetWidth;
+    const x = Math.min(e.clientX + pad, window.innerWidth - w - 8);
+    const y = e.clientY + pad + tipEl.offsetHeight > window.innerHeight ? e.clientY - tipEl.offsetHeight - pad : e.clientY + pad;
+    tipEl.style.left = `${x}px`;
+    tipEl.style.top = `${y}px`;
+  };
+  paths.forEach((p, i) => {
+    const cls = p.className.baseVal;
+    const from = (cls.match(/LS-([A-Za-z0-9_]+)/) || [])[1];
+    const to = (cls.match(/LE-([A-Za-z0-9_]+)/) || [])[1];
+    const e = edges[i] && edges[i].from === from && edges[i].to === to ? edges[i] : edges.find((x) => x.from === from && x.to === to);
+    if (!e) return;
+    const hit = p.cloneNode(false);
+    hit.removeAttribute('id');
+    hit.removeAttribute('marker-end');
+    hit.removeAttribute('marker-start');
+    hit.setAttribute('class', 'edge-hit');
+    p.after(hit);
+    const show = (ev) => {
+      allPaths.forEach((p2) => {
+        p2.classList.toggle('edge-hl', p2 === p);
+        p2.classList.toggle('edge-dim', p2 !== p && !p2.classList.contains('edge-hit'));
+      });
+      labels.forEach((l, j) => l.classList.toggle('edge-dim', j !== i));
+      tipEl.innerHTML =
+        `<b>${e.n !== null ? `${e.n}· ` : ''}${esc(names[from] ?? from)} → ${esc(names[to] ?? to)}</b>` + `<span>${esc(e.text)}</span>`;
+      tipEl.style.display = 'block';
+      place(ev);
+    };
+    const hide = () => {
+      allPaths.forEach((p2) => p2.classList.remove('edge-hl', 'edge-dim'));
+      labels.forEach((l) => l.classList.remove('edge-dim'));
+      tipEl.style.display = 'none';
+    };
+    for (const target of [hit, labels[i]].filter(Boolean)) {
+      target.style.cursor = 'help';
+      target.addEventListener('mouseenter', show);
+      target.addEventListener('mousemove', place);
+      target.addEventListener('mouseleave', hide);
+    }
+  });
+}
+
 async function renderFlowchart(id, src, { direction } = {}) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
   if (isFlowchart && direction) src = withDirection(src, direction);
@@ -423,7 +484,7 @@ async function renderTab() {
       const labelsPref = diagramLabelsPref();
       content.innerHTML = `<div class="diagram-zoom">
           <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
-          <button data-labels title="Edge labels — auto: layout with step numbers only, full text placed along each edge; full: the layout engine places every label (wide); list: step numbers on the map, text in a legend below">labels: ${labelsPref}</button>
+          <button data-labels title="Edge labels — hover: step numbers on the map, full text when the pointer is over a line; along: text placed along each edge; full: the layout engine places every label (wide); list: text in a legend below">labels: ${labelsPref === 'auto' ? 'hover' : labelsPref}</button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
@@ -436,7 +497,7 @@ async function renderTab() {
         renderTab();
       };
       content.querySelector('[data-labels]').onclick = () => {
-        const next = { auto: 'full', full: 'list', list: 'auto' }[labelsPref];
+        const next = { auto: 'along', along: 'full', full: 'list', list: 'auto' }[labelsPref] || 'auto';
         try {
           localStorage.setItem(DIAGRAM_LABELS_KEY, next);
         } catch {}
@@ -450,7 +511,8 @@ async function renderTab() {
         const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src, { direction: dir });
         wrap.innerHTML = svg;
         content.querySelector('.edge-legend-slot').innerHTML = labelsPref === 'list' ? edgeLegendHtml(s.diagram) : '';
-        if (labelsPref === 'auto') overlayEdgeLabels(wrap.querySelector('svg'), s.diagram);
+        if (labelsPref === 'along') overlayEdgeLabels(wrap.querySelector('svg'), s.diagram);
+        if (labelsPref !== 'full') attachEdgeTooltips(wrap, s.diagram);
         setupDiagramZoom(content, wrap);
         // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
         wrap.querySelectorAll('.edgePaths').forEach((ep) => {

@@ -190,7 +190,10 @@ main .empty code {
 }
 .diagram-zoom button:hover { border-color: var(--accent); }
 .diagram-zoom-val { font-size: 12px; opacity: 0.6; min-width: 38px; text-align: right; }
-/* edge text placed by the viewer along each edge (labels: auto) */
+/* invisible wide stroke that makes a 1px edge hoverable (labels: hover) */
+.diagram-wrap svg path.edge-hit { fill: none; stroke: transparent; stroke-width: 16px; pointer-events: stroke; }
+.diagram-wrap svg .edgeLabels > g { cursor: help; }
+/* edge text placed by the viewer along each edge (labels: along) */
 .diagram-wrap svg .edge-note rect { fill: var(--panel, #101014); stroke: #3a3a44; stroke-width: 0.8; }
 .diagram-wrap svg .edge-note text { fill: #c9c9d1; font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; }
 .diagram-wrap svg .edge-note.dashed text { fill: #9a9aa3; }
