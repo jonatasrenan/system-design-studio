@@ -43,7 +43,7 @@ export const FILE_RENAMES = {
 };
 
 const META_VALUES = {
-  mode: { estudio: 'studio', entrevista: 'interview-free', simulacao: 'simulation' },
+  mode: { estudio: 'studio' },
   status: { 'em-andamento': 'in-progress', concluido: 'done' },
 };
 
