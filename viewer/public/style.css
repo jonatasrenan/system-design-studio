@@ -26,6 +26,16 @@ header {
   background: var(--panel);
 }
 header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+/* published page only: the thin bar above the panel that takes the reader back to
+   where they came from, and to the sibling version of the design (share.mjs --back/--alt) */
+.site-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 7px 18px; font-size: 12.5px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.site-bar a { color: var(--accent); text-decoration: none; }
+.site-bar a:hover { text-decoration: underline; }
+.site-bar a.alt { color: var(--muted); }
 #session-select {
   background: var(--bg);
   color: var(--text);
