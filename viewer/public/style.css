@@ -265,7 +265,10 @@ button.share-btn:hover { color: var(--text); border-color: var(--accent); }
   background: color-mix(in srgb, var(--panel) 55%, var(--bg));
 }
 .md details summary { cursor: pointer; color: var(--accent); font-weight: 500; }
-.md .mermaid-block { text-align: center; background: none; border: none; }
+.md .mermaid-block { text-align: center; background: none; border: none; margin: 18px 0; }
+/* a diagram wider than the text column takes the viewport: fit-to-width stays readable */
+.md .mermaid-block.wide { width: calc(100vw - 64px); margin-left: calc(50% - 50vw + 32px); }
+.md .mermaid-block .diagram-wrap { max-height: 82vh; }
 
 /* ficha → nó: destaque temporário no diagrama */
 .comp { cursor: pointer; }

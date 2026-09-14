@@ -16,6 +16,8 @@ const MERMAID_BASE = {
   // em linhas (em vez de esticar o nó) e o espaçamento entre nós fica menor.
   flowchart: { useMaxWidth: true, htmlLabels: true, wrappingWidth: 160, nodeSpacing: 28, rankSpacing: 44, padding: 8 },
   elk: { mergeEdges: true, nodePlacementStrategy: 'BRANDES_KOEPF' },
+  // ER: slightly tighter boxes so a 15-entity model fits the width at a readable size
+  er: { useMaxWidth: true, fontSize: 12, entityPadding: 12, minEntityWidth: 90, minEntityHeight: 50, layoutDirection: 'TB' },
 };
 const mermaidInit = (renderer) =>
   mermaid.initialize({ ...MERMAID_BASE, flowchart: { ...MERMAID_BASE.flowchart, defaultRenderer: renderer } });
@@ -141,6 +143,9 @@ function tabTitle(file) {
   return file.name.replace(/^\d+-/, '').replace(/\.md$/, '');
 }
 
+// Diagrams inside a stage's markdown (ER on the data-model tab, zoom sub-diagrams in
+// design) get the same treatment as the main diagram: they break out of the 900px
+// text column when they need the width, fit to it, and zoom/drag like the main one.
 async function renderMermaidIn(container) {
   const blocks = container.querySelectorAll('code.language-mermaid');
   for (const code of blocks) {
@@ -149,7 +154,20 @@ async function renderMermaidIn(container) {
     holder.className = 'mermaid-block';
     try {
       const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src);
-      holder.innerHTML = svg;
+      holder.innerHTML = `<div class="diagram-zoom">
+          <button data-z="out" title="Zoom out">−</button>
+          <button data-z="fit" title="Fit to width">fit</button>
+          <button data-z="in" title="Zoom in">+</button>
+          <span class="diagram-zoom-val">100%</span>
+        </div><div class="diagram-wrap"></div>`;
+      const wrap = holder.querySelector('.diagram-wrap');
+      wrap.innerHTML = svg;
+      code.closest('pre').replaceWith(holder);
+      // wider than the text column → full-bleed, so the fit-to-width factor stays readable
+      const natural = wrap.querySelector('svg')?.viewBox?.baseVal?.width || 0;
+      if (natural > holder.clientWidth) holder.classList.add('wide');
+      setupDiagramZoom(holder, wrap);
+      continue;
     } catch (e) {
       holder.innerHTML = `<pre>${src}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
     }
