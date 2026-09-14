@@ -20,10 +20,12 @@ The user talks in natural language — they **don't** know about or need to call
 
 A session's pipeline is a DAG (also the tab order): `00-problema → 10-requisitos → 20-estimativas → 25-dominio → 30-design → 35-modelo-de-dados → 40-tradeoffs → 50-operacao → diagram/scorecard → 90-duvidas → 45-review → 70-poc → 60-avaliacao`. `25-dominio` and `35-modelo-de-dados` are optional (proposed by default only when the dominant risk is data-shaped — see the design skill) but sit at fixed, causal DAG positions: an aggregate boundary is a transaction boundary, and the transaction boundary decides the row grain. Whenever any premise changes:
 
-1. Update the upstream file where the premise lives.
-2. Run `node tools/check.mjs <slug>` — it compares against the last baseline and **deterministically** lists the downstream files that weren't revisited.
-3. Go through each one: update what the change affects (numbers, components, costs, diagram) or explicitly confirm it isn't affected.
-4. When done, run `node tools/check.mjs <slug> --baseline` to record the new consistent state.
+**The order is what makes this protocol useful — do not reorder it.** Running the checker before editing anything tells you nothing (nothing changed yet, so it reports "consistent"); editing every downstream file from memory and only then rewriting the baseline is exactly how a stale number survives — the checker never gets a chance to point at what you skipped.
+
+1. Edit **only** the upstream file where the premise lives — nothing else yet.
+2. Run `node tools/check.mjs <slug>` — it compares against the last baseline and **deterministically** lists the downstream files that weren't revisited. This list is the roadmap for step 3, not a formality to glance at.
+3. Go through **every** file on that list: recompute the number, swap the component, adjust cost and diagram (`scorecard.mjs remove-*` for whatever left the design), or explicitly confirm in writing that this specific file isn't affected.
+4. Only once every file on the list has been handled, run `node tools/check.mjs <slug> --baseline`. Use `--nota "<text>"` when a file's answer to step 3 was "unaffected" — it records that confirmation in the session state instead of leaving it only in the conversation; `check.mjs <slug>` (no flags) prints the latest note back. The last 20 notes are kept.
 
 A Stop hook runs `node tools/check.mjs --hook` at the end of every turn and returns the list of what's missing, blocking the turn from ending. Two slack rules keep it from getting in the way: a session with a file touched in the last 2 minutes is skipped (the charge falls to the next turn), and a second block in the same chain releases with a warning. Record a session's first baseline once it reaches its first coherent state (end of the initial design phase); before that, the checker doesn't charge for staleness.
 
@@ -67,7 +69,7 @@ sessions/<yyyy-mm-dd>-<slug>/
 | Create session (full setup: skeleton + viewer + learnings/argumentário on stdout) | `node tools/new-session.mjs "<title>" --mode estudio\|entrevista [--slug <slug>] [--no-viewer]` → line 1 is the slug |
 | Create stages from template (several per call) | `node tools/stage.mjs <slug> <stage> [<stage>...] [--print]` (requisitos\|estimativas\|dominio\|design\|modelo\|tradeoffs\|operacao\|duvidas\|poc; `--print` only prints the template, for a direct Write) |
 | Any scorecard write (prefer multi-block `apply` via stdin) | `node tools/scorecard.mjs <slug> apply` ← stdin `{"components":[…],"costs":[…],"slos":[…],"capacity":[…],"risks":[…],"guardrails":{…},"rubric":{…}}` (granular commands `upsert-*`/`set-*`/`add-risks` still work) |
-| Consistency / baseline (validates before recording) | `node tools/check.mjs [<slug>] [--baseline] [--force]` |
+| Consistency / baseline (validates before recording; prints the latest `--nota` when called without flags) | `node tools/check.mjs [<slug>] [--baseline] [--force] [--nota "<text>"]` |
 | Deterministic review lints (diagram↔scorecard coverage, queues, numbering, jargon, budget…) | `node tools/check.mjs <slug> --lint` |
 | List every lint predicate (id, requirement, output) — the single source of truth, never read the code to find out | `node tools/check.mjs --regras` |
 | Structural eval | `node tools/eval.mjs <slug> [--golden <dir>]` |

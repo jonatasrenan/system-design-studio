@@ -102,7 +102,18 @@ function checkSession(slug) {
   return problems;
 }
 
-function baseline(slug, force) {
+// Reads the state file's notes array (last 20, newest last) — used by baseline()
+// to append and by the plain `check.mjs <slug>` report to print the latest one.
+function readNotas(dir) {
+  try {
+    const state = JSON.parse(fs.readFileSync(path.join(dir, '.state.json'), 'utf8'));
+    return Array.isArray(state.notas) ? state.notas : [];
+  } catch {
+    return [];
+  }
+}
+
+function baseline(slug, force, nota) {
   const dir = resolveDir(slug);
   if (!fs.existsSync(dir)) {
     console.error(`session not found: ${slug}`);
@@ -120,8 +131,13 @@ function baseline(slug, force) {
     const p = path.join(dir, name);
     if (fs.existsSync(p)) hashes[name] = hashFile(p);
   }
-  fs.writeFileSync(path.join(dir, '.state.json'), JSON.stringify({ hashes, at: new Date().toISOString() }, null, 2));
-  console.log(`baseline recorded for ${slug} (${Object.keys(hashes).length} files)`);
+  // --nota records what was confirmed unaffected by a premise change — the decision
+  // to leave a downstream file untouched stops living only in the pilot's head.
+  // Last 20 notes are kept, newest last; `check.mjs <slug>` (no flags) prints the latest.
+  let notas = readNotas(dir);
+  if (nota) notas = [...notas, { quando: new Date().toISOString(), texto: nota }].slice(-20);
+  fs.writeFileSync(path.join(dir, '.state.json'), JSON.stringify({ hashes, at: new Date().toISOString(), notas }, null, 2));
+  console.log(`baseline recorded for ${slug} (${Object.keys(hashes).length} files)${nota ? ' — note recorded' : ''}`);
 }
 
 // --- deterministic review lints: whatever is regex/parse stays out of the LLM and lives here ---
@@ -169,6 +185,51 @@ function parseStateDiagram(src) {
   }
   return edges;
 }
+
+// --- number parsing shared by [capacity] and [numeros]: a stale number after a
+// premise change is the defect the mesa catches in seconds and the lint didn't
+// used to. Brazilian formatting (2.000,50) and plain (2000.5) both parse; k/mil/M
+// are magnitude multipliers, so "2.000 ≈ 2 mil ≈ 2000 ≈ 2k" compare equal. -----
+const NUMRAW = '\\d{1,3}(?:\\.\\d{3})+(?:,\\d+)?|\\d+(?:[.,]\\d+)?';
+function parseBrNumber(raw) {
+  let s = raw.trim();
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 2.000,50
+  else if (/^\d+,\d+$/.test(s)) s = s.replace(',', '.'); // 6,6
+  return parseFloat(s);
+}
+const numbersClose = (a, b) => Math.abs(a - b) < Math.max(1e-6, Math.abs(b) * 0.005);
+const MAGNITUDE = { k: 1e3, mil: 1e3, M: 1e6 };
+// Every number found in free text, expanded by a following k/mil/M magnitude word if present.
+// Used for the side that's just "does this quantity appear anywhere" (capacity items,
+// 20-estimativas.md, 10-requisitos.md) — no unit token required.
+function extractMagnitudeNumbers(text) {
+  const out = new Set();
+  const re = new RegExp(`(${NUMRAW})\\s?(k|mil|M)?(?![A-Za-zÀ-ÿ])`, 'g');
+  for (const m of (text ?? '').matchAll(re)) {
+    const v = parseBrNumber(m[1]);
+    if (!Number.isNaN(v)) out.add(v * (MAGNITUDE[m[2]] ?? 1));
+  }
+  return out;
+}
+// Numbers that carry a UNIT as a whole token — this is what [numeros] flags, and
+// requiring the unit is what keeps "10 sessões" from being read as "10 s" and a
+// bare HTTP code / year / #N (no unit at all) from ever matching.
+function extractNumUnitTokens(text) {
+  if (!text) return [];
+  const out = [];
+  // number + magnitude/duration/percent unit, directly adjacent (optional single space)
+  const reA = new RegExp(`(${NUMRAW})\\s?(?:k|mil|M|KB|MB|GB|ms|min|h|%)(?![A-Za-zÀ-ÿ])`, 'g');
+  for (const m of text.matchAll(reA)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
+  // rate units fused to the noun they describe ("avisos/s", "requisições/dia") — the
+  // word in between is why these can't share reA's "directly adjacent" pattern
+  const reB = new RegExp(`(${NUMRAW})\\s+[A-Za-zÀ-ÿ]+(?:\\/s|\\/dia)`, 'g');
+  for (const m of text.matchAll(reB)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
+  // currency prefix
+  const reC = new RegExp(`(?:R\\$|US\\$|\\$)\\s?(${NUMRAW})`, 'g');
+  for (const m of text.matchAll(reC)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
+  return out;
+}
+
 // Single source of truth for what `--lint` checks: id, what it requires, what it
 // reports. `node tools/check.mjs --regras` prints this list; every lint message
 // starts with the matching [id] (enforced below — an id used but not registered
@@ -189,6 +250,13 @@ const REGRAS = [
   { id: 'numeracao', output: 'aviso', requires: '40-tradeoffs.md "## N." headings are numbered sequentially from 1' },
   { id: 'adiadas', output: 'aviso', requires: 'no "Decisões adiadas" line in 40-tradeoffs.md promising something a stage already delivers' },
   { id: 'guardrails-soma', output: 'FALHA', requires: 'scorecard.guardrails pass+falha+na+premissas+riscos equals the item count in guardrails.md' },
+  { id: 'capacity', output: 'aviso', requires: 'every scorecard.capacity number (magnitude-normalized: 2.000 ≈ 2 mil ≈ 2000 ≈ 2k) appears in 20-estimativas.md' },
+  {
+    id: 'numeros',
+    output: 'aviso',
+    requires:
+      'every number-with-unit (k, mil, M, KB, MB, GB, ms, s, min, h, %, /s, /dia, currency) in 40-tradeoffs.md, 25-dominio.md, 30-design.md, and components[].purpose/scaling/failure appears in 20-estimativas.md or 10-requisitos.md',
+  },
   { id: 'dominio-invariantes', output: 'FALHA', requires: '25-dominio.md invariants table: header starting "| ID |", INV-n ids, no empty cells, fixed Prevenção vocabulary' },
   { id: 'dominio-ciclo-vida', output: 'FALHA', requires: '25-dominio.md "## Ciclo de vida" stateDiagram-v2: every destination state has an outgoing edge or terminates at [*]; matches 35-modelo-de-dados.md\'s ER state enum' },
   { id: 'dominio-agregados', output: 'FALHA/aviso', requires: 'each "### Agregado: <name>" mentions cardinality (FALHA if not) and cites an INV-n or says the boundary is justified (aviso if neither)' },
@@ -539,6 +607,68 @@ function lintSession(slug) {
     }
   }
 
+  // --- [capacity] and [numeros]: catch a stale number left behind after a premise
+  // change propagated through some files but not all (see CLAUDE.md's propagation
+  // protocol) ---
+  {
+    const estimativasRaw = read('20-estimativas.md');
+    const requisitosRaw = read('10-requisitos.md');
+    const backingNums = extractMagnitudeNumbers(
+      `${estimativasRaw ? stripHtmlComments(estimativasRaw) : ''}\n${requisitosRaw ? stripHtmlComments(requisitosRaw) : ''}`
+    );
+
+    // [capacity]
+    const capacity = sc?.capacity ?? [];
+    if (!capacity.length) {
+      naoChecado('capacity', 'no scorecard.capacity items');
+    } else if (!estimativasRaw) {
+      naoChecado('capacity', 'no 20-estimativas.md in this session to check numbers against');
+    } else {
+      for (const item of capacity) {
+        const itemNums = [...extractMagnitudeNumbers(String(item.value ?? ''))];
+        if (!itemNums.length) continue; // nothing numeric in this item (a qualitative value)
+        const found = itemNums.some((n) => [...backingNums].some((e) => numbersClose(e, n)));
+        if (!found)
+          aviso(
+            'capacity',
+            `scorecard.capacity "${item.name}" = "${item.value}" doesn't appear in 20-estimativas.md (stale number after a premise change?)`
+          );
+      }
+    }
+
+    // [numeros]
+    if (!estimativasRaw && !requisitosRaw) {
+      naoChecado('numeros', 'no 20-estimativas.md or 10-requisitos.md in this session to check numbers against');
+    } else {
+      const numerosSources = [
+        ['40-tradeoffs.md', tradeoffs],
+        ['25-dominio.md', read('25-dominio.md')],
+        ['30-design.md', read('30-design.md')],
+      ];
+      for (const [fname, raw] of numerosSources) {
+        if (!raw) continue;
+        const lines = stripHtmlComments(raw).split('\n');
+        lines.forEach((line, i) => {
+          for (const tok of extractNumUnitTokens(line)) {
+            if (![...backingNums].some((n) => numbersClose(n, tok.value)))
+              aviso(
+                'numeros',
+                `${fname}:${i + 1} — "${tok.text}" doesn't appear in 20-estimativas.md nor 10-requisitos.md (stale number after propagation?)`
+              );
+          }
+        });
+      }
+      for (const c of comps)
+        for (const field of ['purpose', 'scaling', 'failure'])
+          for (const tok of extractNumUnitTokens(c[field] ?? ''))
+            if (![...backingNums].some((n) => numbersClose(n, tok.value)))
+              aviso(
+                'numeros',
+                `scorecard.components["${c.name}"].${field} — "${tok.text}" doesn't appear in 20-estimativas.md nor 10-requisitos.md (stale number after propagation?)`
+              );
+    }
+  }
+
   // guardrails closed sum: pass+falha+na+premissas+riscos must equal the checklist size in
   // guardrails.md — an item nobody has judged yet can't silently disappear from the count.
   {
@@ -597,10 +727,16 @@ if (args.includes('--regras')) {
 
 if (doBaseline) {
   if (!slugArg) {
-    console.error('usage: node tools/check.mjs <slug> --baseline [--force]');
+    console.error('usage: node tools/check.mjs <slug> --baseline [--force] [--nota "<text>"]');
     process.exit(1);
   }
-  baseline(slugArg, args.includes('--force'));
+  const notaIdx = args.indexOf('--nota');
+  const nota = notaIdx >= 0 ? args[notaIdx + 1] : null;
+  if (notaIdx >= 0 && !nota) {
+    console.error('--nota with no value');
+    process.exit(1);
+  }
+  baseline(slugArg, args.includes('--force'), nota);
   process.exit(0);
 }
 
@@ -660,6 +796,14 @@ if (hookMode) {
   }
   console.error(msg);
   process.exit(2);
+}
+
+// single-session call (not the bulk "check everything"): print the latest baseline
+// note, if any — the decision to leave a downstream file untouched shouldn't live
+// only in the pilot's head.
+if (slugArg) {
+  const last = readNotas(resolveDir(slugArg)).at(-1);
+  if (last) console.log(`note (${last.quando.slice(0, 10)}): ${last.texto}`);
 }
 
 if (!report.length) {
