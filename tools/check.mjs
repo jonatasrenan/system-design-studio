@@ -12,11 +12,16 @@
 //    revisit it (update it or confirm nothing changes) and run --baseline.
 //
 // Usage:
-//   node tools/check.mjs                  # checks every session
+//   node tools/check.mjs                  # checks every session + the repo-wide DAG-prose rule
 //   node tools/check.mjs <slug>           # checks one session
 //   node tools/check.mjs <slug> --baseline  # validates structure and marks the state as consistent
 //   node tools/check.mjs <slug> --lint    # deterministic review lints (diagram, queues, jargon...)
+//   node tools/check.mjs --regras         # lists every lint predicate: id, what it requires, what it reports
 //   node tools/check.mjs --hook           # Stop-hook mode: exit 2 blocks the turn
+//
+// `--regras` is the single source of truth for what `--lint` checks — every message
+// the lint prints starts with the matching [id]; read `--regras` instead of the
+// source when you need to know what's covered.
 //
 // Per-agent scoping (parallel execution): with the SD_SESSION=<slug> environment
 // variable, --hook mode (and the no-slug call) checks ONLY that session — one
@@ -26,7 +31,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ORDER, hashFile, stageStatus, parseDiagram, JARGON, writeAtomic, stripHtmlComments } from './pipeline.mjs';
+import { ORDER, hashFile, stageStatus, parseDiagram, JARGON, writeAtomic, stripHtmlComments, RETIRED_STAGES } from './pipeline.mjs';
+import { TEMPLATE_BY_FILE } from './templates.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SESSIONS_DIR = path.join(ROOT, 'sessions');
@@ -163,6 +169,87 @@ function parseStateDiagram(src) {
   }
   return edges;
 }
+// Single source of truth for what `--lint` checks: id, what it requires, what it
+// reports. `node tools/check.mjs --regras` prints this list; every lint message
+// starts with the matching [id] (enforced below — an id used but not registered
+// here is a programming error, not something to fail silently on).
+const REGRAS = [
+  { id: 'subgraphs', output: 'FALHA', requires: 'diagram.mmd groups nodes into at least 2 subgraphs' },
+  { id: 'cobertura', output: 'FALHA', requires: 'every non-actor diagram node has a scorecard.components entry (ficha); every non-actor, non-external (🔌) node also has a scorecard.costs.items entry' },
+  { id: 'fila', output: 'FALHA', requires: 'every queue/topic node (diagram + its ficha) declares a DLQ+reprocessing path, or an explicit accepted loss' },
+  { id: 'fluxo-inicio', output: 'FALHA', requires: 'the "1·" numbered edge starts at an actor (the clients subgraph)' },
+  { id: 'direcao', output: 'aviso', requires: 'no numbered edge whose label starts with an HTTP status code or resposta/devolve/retorna (a response drawn as the initiative)' },
+  { id: 'emoji', output: 'aviso', requires: 'every diagram node label includes one of the taxonomy emoji' },
+  { id: 'zoom', output: 'aviso', requires: 'node labels ≤ 3 lines and the diagram ≤ ~15 nodes' },
+  { id: 'telemetria', output: 'aviso', requires: 'no node that looks like a generic telemetry/observability collector' },
+  { id: 'atores', output: 'aviso', requires: 'at least one actor besides the end user' },
+  { id: 'jargao', output: 'FALHA', requires: 'no internal-mechanics jargon (commands, skills, work rituals) in any session .md, unless scoped-exempted in meta.json jargao_permitido with a non-empty reason' },
+  { id: 'etapa-aposentada', output: 'aviso', requires: 'no file on disk named after a stage retired from the canonical pipeline (tools/pipeline.mjs RETIRED_STAGES)' },
+  { id: 'defesa', output: 'aviso', requires: 'every trade-off entry in 40-tradeoffs.md has a "Defesa em 30s" line' },
+  { id: 'numeracao', output: 'aviso', requires: '40-tradeoffs.md "## N." headings are numbered sequentially from 1' },
+  { id: 'adiadas', output: 'aviso', requires: 'no "Decisões adiadas" line in 40-tradeoffs.md promising something a stage already delivers' },
+  { id: 'guardrails-soma', output: 'FALHA', requires: 'scorecard.guardrails pass+falha+na+premissas+riscos equals the item count in guardrails.md' },
+  { id: 'dominio-invariantes', output: 'FALHA', requires: '25-dominio.md invariants table: header starting "| ID |", INV-n ids, no empty cells, fixed Prevenção vocabulary' },
+  { id: 'dominio-ciclo-vida', output: 'FALHA', requires: '25-dominio.md "## Ciclo de vida" stateDiagram-v2: every destination state has an outgoing edge or terminates at [*]; matches 35-modelo-de-dados.md\'s ER state enum' },
+  { id: 'dominio-agregados', output: 'FALHA/aviso', requires: 'each "### Agregado: <name>" mentions cardinality (FALHA if not) and cites an INV-n or says the boundary is justified (aviso if neither)' },
+  { id: 'dominio-vocabulario', output: 'FALHA', requires: 'every "## Contextos" entry owns a vocabulary term; every vocabulary owner is a declared context' },
+  { id: 'dominio-modelo-vocabulario', output: 'FALHA', requires: "35-modelo-de-dados.md's vocabulary terms match 25-dominio.md's" },
+  {
+    id: 'dag-prosa',
+    output: 'FALHA',
+    requires:
+      "CLAUDE.md's DAG prose line matches the canonical order in tools/pipeline.mjs ORDER (repo-wide: runs without a slug and inside --lint, never inside --hook)",
+  },
+];
+const REGRAS_IDS = new Set(REGRAS.map((r) => r.id));
+
+// Emit helpers shared by every predicate below: validate the id is registered
+// (throwing is the point — an unregistered id must break loudly, in CI/dev, not
+// pass silently in someone's session) and prefix every message with [id].
+function makeEmitters(falhas, avisos, naoChecados) {
+  const assertRegistered = (id) => {
+    if (!REGRAS_IDS.has(id))
+      throw new Error(`internal error: lint id "${id}" is not registered in REGRAS — run --regras to see the registered ids`);
+  };
+  return {
+    falha: (id, msg) => {
+      assertRegistered(id);
+      falhas.push(`[${id}] ${msg}`);
+    },
+    aviso: (id, msg) => {
+      assertRegistered(id);
+      avisos.push(`[${id}] ${msg}`);
+    },
+    naoChecado: (id, msg) => {
+      assertRegistered(id);
+      naoChecados.push(`[${id}] ${msg}`);
+    },
+  };
+}
+
+// Repo-wide: CLAUDE.md's DAG prose (kept in sync by hand) vs. the canonical order
+// in ORDER. Returns plain messages (no [id] prefix — callers format that, since
+// this runs both inside a session's --lint and in the no-slug structural check).
+function dagProseProblems() {
+  let claudeMd = '';
+  try {
+    claudeMd = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8');
+  } catch {}
+  const m = /pipeline is a DAG[^:]*:\s*`([^`]+)`/.exec(claudeMd);
+  if (!m) return ['could not find the DAG prose line in CLAUDE.md to check against tools/pipeline.mjs ORDER'];
+  const files = [];
+  for (const tok of m[1].split('→').map((s) => s.trim())) {
+    if (tok === 'diagram/scorecard') {
+      files.push('diagram.mmd', 'scorecard.json');
+      continue;
+    }
+    files.push(/\.\w+$/.test(tok) ? tok : `${tok}.md`);
+  }
+  const a = files.join(' → ');
+  const b = ORDER.join(' → ');
+  return a === b ? [] : [`CLAUDE.md's DAG line doesn't match tools/pipeline.mjs ORDER:\n    CLAUDE.md:    ${a}\n    pipeline.mjs: ${b}`];
+}
+
 function lintSession(slug) {
   const dir = resolveDir(slug);
   if (!fs.existsSync(dir)) {
@@ -179,6 +266,7 @@ function lintSession(slug) {
   const falhas = [];
   const avisos = [];
   const naoChecados = [];
+  const { falha, aviso, naoChecado } = makeEmitters(falhas, avisos, naoChecados);
   let sc = null;
   try {
     sc = JSON.parse(read('scorecard.json'));
@@ -189,8 +277,9 @@ function lintSession(slug) {
 
   if (diagram) {
     const { nodes, edges, subgraphs } = parseDiagram(diagram);
-    if (subgraphs.length < 2) falhas.push('diagram has no groupings (subgraphs) — illegible');
+    if (subgraphs.length < 2) falha('subgraphs', 'diagram has no groupings (subgraphs) — illegible');
     const isActor = (n) => /cliente/i.test(n.subgraph ?? '') || n.label.includes('👤');
+    const isExternal = (n) => n.label.includes('🔌');
     // token-overlap ≥ 0.5 — same criterion the viewer uses to match a node ↔ sheet
     const normTok = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\\n/g, ' ');
     const tokens = (s) => new Set(normTok(s).split(/[^a-z0-9]+/).filter((t) => t.length > 2));
@@ -204,9 +293,10 @@ function lintSession(slug) {
     const noEmoji = [];
     for (const n of nodes) {
       if (isActor(n)) continue;
-      if (!hasComp(n)) falhas.push(`node "${n.id}" has no entry in the scorecard's components (legend)`);
-      if (!hasCost(n)) falhas.push(`node "${n.id}" has no entry in the scorecard's costs.items`);
-      if (n.lines > 3) avisos.push(`node "${n.id}" has a ${n.lines}-line label (budget: 3 — detail belongs in the sheet)`);
+      if (!hasComp(n)) falha('cobertura', `node "${n.id}" has no entry in the scorecard's components (legend)`);
+      // external (🔌) dependencies get a ficha but never a cost line — it's someone else's infrastructure
+      if (!isExternal(n) && !hasCost(n)) falha('cobertura', `node "${n.id}" has no entry in the scorecard's costs.items`);
+      if (n.lines > 3) aviso('zoom', `node "${n.id}" has a ${n.lines}-line label (budget: 3 — detail belongs in the sheet)`);
       if (!TAXONOMY.some((e) => n.label.includes(e))) noEmoji.push(n.id);
       // queue = shape [[...]] or a label that STARTS by naming a queue ("queue page" doesn't count)
       const isQueue = n.shape === '[[' || /^"?\s*(fila|queue|t[óo]pico|stream)\b/i.test(n.label);
@@ -214,44 +304,113 @@ function lintSession(slug) {
         const ficha = comps.find((c) => matches(n.label, c.name));
         const texto = `${n.label} ${ficha?.purpose ?? ''} ${ficha?.failure ?? ''}`;
         if (!/DLQ|perda aceita|descarte|dead.?letter/i.test(texto))
-          falhas.push(`queue "${n.id}" has no declared failure destination (DLQ + reprocessing, or "accepted loss")`);
+          falha('fila', `queue "${n.id}" has no declared failure destination (DLQ + reprocessing, or "accepted loss")`);
       }
     }
-    if (noEmoji.length) avisos.push(`${noEmoji.length} node(s) without a taxonomy emoji: ${noEmoji.join(', ')}`);
+    if (noEmoji.length) aviso('emoji', `${noEmoji.length} node(s) without a taxonomy emoji: ${noEmoji.join(', ')}`);
     for (const n of nodes)
       if (/observabilidad|telemetria|monitor(amento|ing)\b/i.test(n.label))
-        avisos.push(
+        aviso(
+          'telemetria',
           `node "${n.id}" looks like telemetry collection — universal collection isn't drawn (signals live in operations); keep it only if it's a component of the problem itself`
         );
-    if (nodes.length > 15) avisos.push(`diagram with ${nodes.length} nodes (budget: ~15 — consider a system-node + a zoom sub-diagram)`);
+    if (nodes.length > 15)
+      aviso('zoom', `diagram with ${nodes.length} nodes (budget: ~15 — consider a system-node + a zoom sub-diagram)`);
     const numbered = edges.filter((e) => /^"?\s*\d+\s*[·.]/.test(e.label));
-    if (!numbered.length) falhas.push('no numbered edge — the main flow must tell the story (1·, 2·…)');
+    if (!numbered.length) falha('fluxo-inicio', 'no numbered edge — the main flow must tell the story (1·, 2·…)');
     else {
       const first = numbered.find((e) => /^"?\s*1\s*[·.]/.test(e.label));
       const fromNode = first && nodes.find((n) => n.id === first.from);
       if (first && fromNode && !isActor(fromNode))
-        falhas.push(`edge 1· starts from "${first.from}" — the flow must start at the user's arrival (clients subgraph)`);
+        falha('fluxo-inicio', `edge 1· starts from "${first.from}" — the flow must start at the user's arrival (clients subgraph)`);
+    }
+    // direction = who initiates: a numbered edge whose label opens with a response
+    // (HTTP status, or resposta/devolve/retorna) is drawn backwards
+    for (const e of edges) {
+      const m = e.label.match(/^"?\s*\d+\s*[·.]\s*(.*)$/);
+      if (m && /^(?:\d{3}\b|resposta|devolve|retorna)/i.test(m[1]))
+        aviso(
+          'direcao',
+          `edge ${e.from}->${e.to} — label "${e.label}" opens with a response (HTTP status or resposta/devolve/retorna) though it's drawn as the numbered initiative; direction should follow who initiates the action, not who answers`
+        );
     }
     const actors = nodes.filter(isActor);
-    if (actors.length === 1) avisos.push('no actor besides the end user (organizer/back office/ops — almost every system has one)');
+    if (actors.length === 1) aviso('atores', 'no actor besides the end user (organizer/back office/ops — almost every system has one)');
   } else {
-    falhas.push('diagram.mmd missing');
+    falha('subgraphs', 'diagram.mmd missing');
   }
 
   // HTML comments (e.g. a stage template's lint-contract header) are documentation,
   // never artifact content — strip them before any content check, jargon included.
+  let meta = null;
+  try {
+    meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+  } catch {}
+  const jargaoPermitido = meta?.jargao_permitido && typeof meta.jargao_permitido === 'object' ? meta.jargao_permitido : {};
   for (const f of ORDER.filter((n) => n.endsWith('.md'))) {
     const c = read(f);
     if (!c) continue;
-    for (const [i, line] of stripHtmlComments(c).split('\n').entries())
-      if (JARGON.test(line)) falhas.push(`internal jargon in ${f}:${i + 1} — artifacts are shareable`);
+    for (const [i, line] of stripHtmlComments(c).split('\n').entries()) {
+      const m = JARGON.exec(line);
+      if (!m) continue;
+      const token = m[0];
+      // scoped exception: meta.json declares the term is the design's own subject, with a reason
+      const exemptKey = Object.keys(jargaoPermitido).find(
+        (k) => token.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(token.toLowerCase())
+      );
+      if (exemptKey) {
+        const motivo = String(jargaoPermitido[exemptKey] ?? '').trim();
+        if (motivo) continue; // valid exception, scoped with a reason — not a finding
+        falha(
+          'jargao',
+          `internal jargon in ${f}:${i + 1} ("${token}") — meta.json's jargao_permitido["${exemptKey}"] has no reason recorded, exception invalid`
+        );
+        continue;
+      }
+      falha('jargao', `internal jargon in ${f}:${i + 1} ("${token}") — artifacts are shareable`);
+    }
   }
 
-  const tradeoffs = read('40-tradeoffs.md');
+  // retired stages: a file on disk with a name that left the pipeline
+  for (const f of RETIRED_STAGES)
+    if (fs.existsSync(path.join(dir, f)))
+      aviso('etapa-aposentada', `${f} exists on disk but is no longer part of the pipeline — hidden from both panels; safe to delete`);
+
+  const tradeoffsRaw = read('40-tradeoffs.md');
+  const tradeoffs = tradeoffsRaw ? stripHtmlComments(tradeoffsRaw) : null;
   if (tradeoffs) {
     const entries = (tradeoffs.match(/^##\s+(?!Decisões adiadas|Referências de mercado)/gm) ?? []).length;
     const defesas = (tradeoffs.match(/Defesa em 30s/g) ?? []).length;
-    if (entries > defesas) avisos.push(`${entries - defesas} trade-off(s) without "Defesa em 30s"`);
+    if (entries > defesas) aviso('defesa', `${entries - defesas} trade-off(s) in 40-tradeoffs.md without "Defesa em 30s"`);
+
+    const entryNums = [...tradeoffs.matchAll(/^##\s+(\d+)\.\s+.+$/gm)].map((m) => Number(m[1]));
+    for (let i = 0; i < entryNums.length; i++) {
+      if (entryNums[i] !== i + 1) {
+        aviso('numeracao', `40-tradeoffs.md — trade-off headings are numbered ${entryNums.join(', ')}, not sequential from 1`);
+        break;
+      }
+    }
+
+    // a "Decisões adiadas" line promising something a stage already delivers
+    const adiadasSection = extractSection(tradeoffs, 'Decisões adiadas') ?? '';
+    const ADIADAS_KEYWORDS = [
+      { re: /dom[ií]nio/i, file: '25-dominio.md' },
+      { re: /modelo(?:\s+de\s+dados)?|modelagem/i, file: '35-modelo-de-dados.md' },
+      { re: /\bpoc\b|\bmvp\b/i, file: '70-poc.md' },
+      { re: /d[uú]vidas|faq/i, file: '90-duvidas.md' },
+    ];
+    for (const rawLine of adiadasSection.split('\n')) {
+      const line = rawLine.trim();
+      if (!/^-\s/.test(line)) continue;
+      for (const kw of ADIADAS_KEYWORDS) {
+        if (!kw.re.test(line)) continue;
+        let delivered = false;
+        try {
+          delivered = fs.readFileSync(path.join(dir, kw.file), 'utf8') !== TEMPLATE_BY_FILE[kw.file];
+        } catch {}
+        if (delivered) aviso('adiadas', `40-tradeoffs.md — "${line}" is listed under Decisões adiadas, but ${kw.file} already has content`);
+      }
+    }
   }
 
   // --- Domain & Modeling deterministic predicates (judge guardrails items 30-34) ---
@@ -265,40 +424,41 @@ function lintSession(slug) {
 
     // [dominio-invariantes]
     if (!dominio) {
-      naoChecados.push('dominio-invariantes — no 25-dominio.md in this session');
+      naoChecado('dominio-invariantes', 'no 25-dominio.md in this session');
     } else {
       const table = findTable(dominio, '| ID |');
-      if (!table) naoChecados.push('dominio-invariantes — no invariants table (header starting with "| ID |") in 25-dominio.md');
+      if (!table) naoChecado('dominio-invariantes', 'no invariants table (header starting with "| ID |") in 25-dominio.md');
       else
         table.rows.forEach((row, ri) => {
           const id = row[0] ?? '';
           if (row.some((c) => !c)) {
-            falhas.push(`dominio-invariantes: 25-dominio.md — invariant row ${ri + 1} (${id || '?'}) has an empty cell`);
+            falha('dominio-invariantes', `25-dominio.md — invariant row ${ri + 1} (${id || '?'}) has an empty cell`);
             return;
           }
-          if (!/^INV-\d+$/.test(id)) falhas.push(`dominio-invariantes: 25-dominio.md — invariant id "${id}" doesn't match INV-n`);
+          if (!/^INV-\d+$/.test(id)) falha('dominio-invariantes', `25-dominio.md — invariant id "${id}" doesn't match INV-n`);
           const prevencao = row[2] ?? '';
           if (!isPremissa(prevencao) && !PREVENCAO.some((p) => normVoc(prevencao) === normVoc(p)))
-            falhas.push(`dominio-invariantes: 25-dominio.md — "${id}" has "Prevenção" outside the fixed vocabulary: "${prevencao}"`);
+            falha('dominio-invariantes', `25-dominio.md — "${id}" has "Prevenção" outside the fixed vocabulary: "${prevencao}"`);
         });
     }
 
     // [dominio-ciclo-vida]
     if (!dominio) {
-      naoChecados.push('dominio-ciclo-vida — no 25-dominio.md in this session');
+      naoChecado('dominio-ciclo-vida', 'no 25-dominio.md in this session');
     } else {
       const section = extractSection(dominio, 'Ciclo de vida');
       const mermaidSrc = section && extractMermaid(section);
       if (!mermaidSrc || !/stateDiagram-v2/.test(mermaidSrc)) {
-        naoChecados.push('dominio-ciclo-vida — no "## Ciclo de vida" section with a stateDiagram-v2 block in 25-dominio.md');
+        naoChecado('dominio-ciclo-vida', 'no "## Ciclo de vida" section with a stateDiagram-v2 block in 25-dominio.md');
       } else {
         const edges = parseStateDiagram(mermaidSrc);
         const sources = new Set(edges.map((e) => e.from));
         const destinations = new Set(edges.map((e) => e.to).filter((t) => t !== '[*]'));
         for (const state of destinations)
           if (!sources.has(state))
-            falhas.push(
-              `dominio-ciclo-vida: 25-dominio.md — state "${state}" is a transition's destination with no outgoing edge and no [*] termination`
+            falha(
+              'dominio-ciclo-vida',
+              `25-dominio.md — state "${state}" is a transition's destination with no outgoing edge and no [*] termination`
             );
         // cross-file: state enum values declared on the Model's erDiagram must all exist here
         if (modelo) {
@@ -307,8 +467,9 @@ function lintSession(slug) {
           for (const m of modeloEr.matchAll(/\bstate\b[^\n"]*"([^"]+)"/gi))
             for (const v of m[1].split('|').map((x) => x.trim()).filter(Boolean))
               if (!lifecycleStates.has(normVoc(v)))
-                falhas.push(
-                  `dominio-ciclo-vida: 35-modelo-de-dados.md declares state "${v}" that doesn't exist in 25-dominio.md's lifecycle`
+                falha(
+                  'dominio-ciclo-vida',
+                  `35-modelo-de-dados.md declares state "${v}" that doesn't exist in 25-dominio.md's lifecycle`
                 );
         }
       }
@@ -316,27 +477,27 @@ function lintSession(slug) {
 
     // [dominio-agregados]
     if (!dominio) {
-      naoChecados.push('dominio-agregados — no 25-dominio.md in this session');
+      naoChecado('dominio-agregados', 'no 25-dominio.md in this session');
     } else {
       const matches = [...dominio.matchAll(/^###\s+Agregado:\s*(.+)$/gm)];
       if (!matches.length) {
-        naoChecados.push('dominio-agregados — no "### Agregado: <name>" heading in 25-dominio.md');
+        naoChecado('dominio-agregados', 'no "### Agregado: <name>" heading in 25-dominio.md');
       } else {
         matches.forEach((m, i) => {
           const name = m[1].trim();
           const start = m.index + m[0].length;
           const end = i + 1 < matches.length ? matches[i + 1].index : dominio.length;
           const body = dominio.slice(start, end);
-          if (!/cardinalidade/i.test(body)) falhas.push(`dominio-agregados: 25-dominio.md — "Agregado: ${name}" doesn't mention cardinality`);
+          if (!/cardinalidade/i.test(body)) falha('dominio-agregados', `25-dominio.md — "Agregado: ${name}" doesn't mention cardinality`);
           if (!/INV-\d+/.test(body) && !/justificad/i.test(body))
-            avisos.push(`dominio-agregados: 25-dominio.md — "Agregado: ${name}" cites no INV-n and doesn't say the boundary is justified`);
+            aviso('dominio-agregados', `25-dominio.md — "Agregado: ${name}" cites no INV-n and doesn't say the boundary is justified`);
         });
       }
     }
 
     // [dominio-vocabulario]
     if (!dominio) {
-      naoChecados.push('dominio-vocabulario — no 25-dominio.md in this session');
+      naoChecado('dominio-vocabulario', 'no 25-dominio.md in this session');
     } else {
       const ctxSection = extractSection(dominio, 'Contextos');
       const declaredContexts = ctxSection
@@ -344,35 +505,35 @@ function lintSession(slug) {
         : [];
       const vocabTable = findTable(dominio, '| Termo |');
       if (!declaredContexts.length || !vocabTable) {
-        naoChecados.push('dominio-vocabulario — no "## Contextos" list or no vocabulary table in 25-dominio.md');
+        naoChecado('dominio-vocabulario', 'no "## Contextos" list or no vocabulary table in 25-dominio.md');
       } else {
         const ownersWithTerms = new Set();
         for (const row of vocabTable.rows) {
           const owner = row[1] ?? '';
           ownersWithTerms.add(normVoc(owner));
           if (!declaredContexts.some((c) => normVoc(c) === normVoc(owner)))
-            falhas.push(`dominio-vocabulario: 25-dominio.md — vocabulary owner "${owner}" is not a declared context`);
+            falha('dominio-vocabulario', `25-dominio.md — vocabulary owner "${owner}" is not a declared context`);
         }
         for (const c of declaredContexts)
           if (!ownersWithTerms.has(normVoc(c)))
-            falhas.push(`dominio-vocabulario: 25-dominio.md — context "${c}" has no term in the vocabulary table`);
+            falha('dominio-vocabulario', `25-dominio.md — context "${c}" has no term in the vocabulary table`);
       }
     }
 
     // [dominio-modelo-vocabulario] — the Model's vocabulary must match the Domain's
     if (!dominio || !modelo) {
-      naoChecados.push('dominio-modelo-vocabulario — needs both 25-dominio.md and 35-modelo-de-dados.md');
+      naoChecado('dominio-modelo-vocabulario', 'needs both 25-dominio.md and 35-modelo-de-dados.md');
     } else {
       const domVocab = findTable(dominio, '| Termo |');
       const modVocab = findTable(modelo, '| Termo |');
       if (!domVocab || !modVocab) {
-        naoChecados.push('dominio-modelo-vocabulario — vocabulary table missing in one of the two files');
+        naoChecado('dominio-modelo-vocabulario', 'vocabulary table missing in one of the two files');
       } else {
         const domTerms = new Set(domVocab.rows.map((r) => normVoc(r[0])));
         for (const row of modVocab.rows) {
           const term = row[0] ?? '';
           if (term && !domTerms.has(normVoc(term)))
-            falhas.push(`dominio-modelo-vocabulario: 35-modelo-de-dados.md — term "${term}" doesn't match 25-dominio.md's vocabulary`);
+            falha('dominio-modelo-vocabulario', `35-modelo-de-dados.md — term "${term}" doesn't match 25-dominio.md's vocabulary`);
         }
       }
     }
@@ -388,18 +549,22 @@ function lintSession(slug) {
     const totalItems = (guardrailsMd.match(/^\d+\.\s/gm) ?? []).length;
     const g = sc?.guardrails;
     if (!totalItems) {
-      naoChecados.push('guardrails closed sum — root guardrails.md unreadable');
+      naoChecado('guardrails-soma', 'root guardrails.md unreadable');
     } else if (!g) {
-      naoChecados.push('guardrails closed sum — no guardrails block in scorecard.json yet');
+      naoChecado('guardrails-soma', 'no guardrails block in scorecard.json yet');
     } else {
-      const { pass = 0, falha = 0, na = 0, premissas = 0, riscos = 0 } = g;
-      const sum = pass + falha + na + premissas + riscos;
+      const { pass = 0, falha: fa = 0, na = 0, premissas = 0, riscos = 0 } = g;
+      const sum = pass + fa + na + premissas + riscos;
       if (sum !== totalItems)
-        falhas.push(
-          `guardrails sum is ${sum} (${pass} pass + ${falha} falha + ${na} n/a + ${premissas} premissa(s) + ${riscos} risco(s)), expected ${totalItems} — guardrails.md has ${totalItems} items`
+        falha(
+          'guardrails-soma',
+          `sum is ${sum} (${pass} pass + ${fa} falha + ${na} n/a + ${premissas} premissa(s) + ${riscos} risco(s)), expected ${totalItems} — guardrails.md has ${totalItems} items`
         );
     }
   }
+
+  // repo-wide: CLAUDE.md's DAG prose vs. tools/pipeline.mjs ORDER — runs inside --lint too (never inside --hook)
+  for (const p of dagProseProblems()) falha('dag-prosa', p);
 
   for (const f of falhas) console.log(`FALHA: ${f}`);
   for (const a of avisos) console.log(`aviso: ${a}`);
@@ -423,6 +588,12 @@ const doBaseline = args.includes('--baseline');
 const doLint = args.includes('--lint');
 const envSlug = process.env.SD_SESSION?.trim() || null;
 const slugArg = args.find((a) => !a.startsWith('--')) ?? envSlug;
+
+if (args.includes('--regras')) {
+  const idWidth = Math.max(...REGRAS.map((r) => r.id.length + 2));
+  for (const r of REGRAS) console.log(`${`[${r.id}]`.padEnd(idWidth)} ${r.output.padEnd(11)} — ${r.requires}`);
+  process.exit(0);
+}
 
 if (doBaseline) {
   if (!slugArg) {
@@ -467,6 +638,10 @@ for (const slug of slugs) {
   if (hookMode && inFlight(slug)) continue;
   for (const p of checkSession(slug)) report.push(`[${slug}] ${p}`);
 }
+// repo-wide rule (CLAUDE.md's DAG prose vs. tools/pipeline.mjs ORDER): runs on the
+// plain "check everything" call, never inside the end-of-turn hook (too noisy there
+// for a documentation-drift concern unrelated to the session's own progress).
+if (!hookMode && !slugArg) for (const p of dagProseProblems()) report.push(`[dag-prosa] ${p}`);
 
 if (hookMode) {
   // read from the Stop hook: exit 2 blocks the turn from ending and returns

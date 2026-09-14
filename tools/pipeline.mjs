@@ -23,6 +23,13 @@ export const ORDER = [
   '60-avaliacao.md',
 ];
 
+// Stages retired from the canonical pipeline. A file on disk with one of these names
+// (an old clone, a stray manual write) is hidden from both the local panel and the
+// shared page by this single constant, and flagged by check.mjs --lint ([etapa-aposentada])
+// instead of silently rendering as a raw filename tab. Empty for now — populated the
+// moment a stage is actually retired from ORDER.
+export const RETIRED_STAGES = [];
+
 // optional stages: absence never fails the check (not even in a completed session).
 // 25-dominio.md and 35-modelo-de-dados.md sit in causal DAG position (aggregate
 // boundary decides transaction boundary, transaction boundary decides row grain)
