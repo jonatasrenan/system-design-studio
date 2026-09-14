@@ -190,6 +190,13 @@ main .empty code {
 }
 .diagram-zoom button:hover { border-color: var(--accent); }
 .diagram-zoom-val { font-size: 12px; opacity: 0.6; min-width: 38px; text-align: right; }
+/* legend for compact edge labels: the numbered story reads top to bottom */
+.edge-legend { margin: 14px auto 10px; max-width: 1100px; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 6px 28px; }
+.edge-legend b { display: block; margin: 8px 0 4px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+.edge-legend ol, .edge-legend ul { margin: 0; padding-left: 26px; }
+.edge-legend li { margin: 3px 0; line-height: 1.45; }
+.edge-legend .el-from, .edge-legend .el-to { opacity: 0.75; }
+.edge-legend .el-text { display: block; }
 .comp-legend {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

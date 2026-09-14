@@ -41,6 +41,61 @@ const diagramDirection = () => {
 const withDirection = (src, dir) =>
   dir ? src.replace(/^(\s*)(flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/, `$1$2 ${dir}`) : src;
 
+// Edge labels are what makes a busy map grow sideways: ELK lays every label out on
+// one line next to its edge, so 27 labelled edges cost more width than 15 nodes.
+// Compact mode keeps only the step number on numbered edges ("3·") and moves the
+// text to a legend under the map — the story reads top to bottom instead of
+// being scattered along the edges.
+const DIAGRAM_LABELS_KEY = 'sd-diagram-labels';
+const diagramLabelsPref = () => {
+  try {
+    return localStorage.getItem(DIAGRAM_LABELS_KEY) || 'auto';
+  } catch {
+    return 'auto';
+  }
+};
+const EDGE_RE = /^(\s*)([A-Za-z0-9_]+)\s*(-->|-\.->|==>)\s*\|([^|]+)\|\s*([A-Za-z0-9_]+)\s*$/;
+function edgeList(src) {
+  const edges = [];
+  for (const raw of src.split('\n')) {
+    const m = raw.match(EDGE_RE);
+    if (!m) continue;
+    const n = m[4].match(/^\s*(\d+)\s*[·.]\s*(.*)$/);
+    edges.push({ from: m[2], to: m[5], dashed: m[3] === '-.->', n: n ? Number(n[1]) : null, text: n ? n[2].trim() : m[4].trim() });
+  }
+  return edges;
+}
+const compactEdgeLabels = (src) =>
+  src
+    .split('\n')
+    .map((raw) => {
+      const m = raw.match(EDGE_RE);
+      if (!m) return raw;
+      const n = m[4].match(/^\s*(\d+)\s*[·.]/);
+      return n ? `${m[1]}${m[2]} ${m[3]}|${n[1]}·| ${m[5]}` : `${m[1]}${m[2]} ${m[3]} ${m[5]}`;
+    })
+    .join('\n');
+// node id → label text (first line, emoji kept), for the legend
+function nodeNames(src) {
+  const names = {};
+  for (const m of src.matchAll(/^\s*([A-Za-z0-9_]+)\[([^\]]*)\]/gm)) names[m[1]] = m[2].split('<br>')[0].replace(/^"|"$/g, '').trim();
+  return names;
+}
+function edgeLegendHtml(src) {
+  const edges = edgeList(src);
+  const names = nodeNames(src);
+  const name = (id) => esc(names[id] ?? id);
+  const numbered = edges.filter((e) => e.n !== null).sort((a, b) => a.n - b.n);
+  const others = edges.filter((e) => e.n === null);
+  if (!numbered.length && !others.length) return '';
+  const li = (e) =>
+    `<li><span class="el-from">${name(e.from)}</span> → <span class="el-to">${name(e.to)}</span><span class="el-text">${esc(e.text)}</span></li>`;
+  return `<div class="edge-legend">
+    ${numbered.length ? `<b>The story of a request</b><ol>${numbered.map((e) => `<li value="${e.n}">${li(e).slice(4)}`).join('')}</ol>` : ''}
+    ${others.length ? `<b>Other edges</b><ul>${others.map(li).join('')}</ul>` : ''}
+  </div>`;
+}
+
 async function renderFlowchart(id, src, { direction } = {}) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
   if (isFlowchart && direction) src = withDirection(src, direction);
@@ -291,23 +346,44 @@ async function renderTab() {
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
       const dir = diagramDirection();
+      const labelsPref = diagramLabelsPref();
       content.innerHTML = `<div class="diagram-zoom">
           <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
+          <button data-labels title="Edge labels: auto keeps only the step numbers on the map when the full labels would make it too wide; the text goes to the legend below">labels: ${labelsPref}</button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
-        </div><div class="diagram-wrap"></div>${legend}`;
+        </div><div class="diagram-wrap"></div><div class="edge-legend-slot"></div>${legend}`;
       content.querySelector('[data-dir]').onclick = () => {
         try {
           localStorage.setItem(DIAGRAM_DIR_KEY, dir === 'TB' ? 'LR' : 'TB');
         } catch {}
         renderTab();
       };
+      content.querySelector('[data-labels]').onclick = () => {
+        const next = { auto: 'full', full: 'compact', compact: 'auto' }[labelsPref];
+        try {
+          localStorage.setItem(DIAGRAM_LABELS_KEY, next);
+        } catch {}
+        renderTab();
+      };
       try {
-        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram, { direction: dir });
         const wrap = content.querySelector('.diagram-wrap');
+        let { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, labelsPref === 'compact' ? compactEdgeLabels(s.diagram) : s.diagram, { direction: dir });
+        let compact = labelsPref === 'compact';
+        if (labelsPref === 'auto') {
+          // too wide to read at fit-to-width → compact labels + legend
+          const probe = document.createElement('div');
+          probe.innerHTML = svg;
+          const natural = probe.querySelector('svg')?.viewBox?.baseVal?.width || 0;
+          if (natural > (wrap.clientWidth || 1200) * 1.8) {
+            ({ svg } = await renderFlowchart(`mm-${++mermaidSeq}`, compactEdgeLabels(s.diagram), { direction: dir }));
+            compact = true;
+          }
+        }
         wrap.innerHTML = svg;
+        content.querySelector('.edge-legend-slot').innerHTML = compact ? edgeLegendHtml(s.diagram) : '';
         setupDiagramZoom(content, wrap);
         // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
         wrap.querySelectorAll('.edgePaths').forEach((ep) => {
