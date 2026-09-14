@@ -318,7 +318,8 @@ function setupDiagramZoom(root, wrap) {
     wrap.classList.toggle('is-zoomed', factor > fit + 0.001);
     label.textContent = `${Math.round(factor * 100)}%`;
   };
-  root.querySelectorAll('.diagram-zoom button').forEach((b) => {
+  // only the zoom buttons — the toolbar also holds the direction and text toggles
+  root.querySelectorAll('.diagram-zoom button[data-z]').forEach((b) => {
     b.onclick = () => {
       const avail = wrap.clientWidth || natural;
       const fit = Math.min(1, avail / natural);
