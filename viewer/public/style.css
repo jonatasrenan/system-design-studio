@@ -192,18 +192,15 @@ main .empty code {
 .diagram-zoom-val { font-size: 12px; opacity: 0.6; min-width: 38px; text-align: right; }
 /* invisible wide stroke that makes a 1px edge hoverable (labels: hover) */
 .diagram-wrap svg path.edge-hit { fill: none; stroke: transparent; stroke-width: 16px; pointer-events: stroke; }
-.diagram-wrap svg .edgeLabels > g { cursor: help; }
+/* step-number markers drawn by the viewer at the midpoint of numbered edges */
+.diagram-wrap svg .edge-step { cursor: help; }
+.diagram-wrap svg .edge-step circle { fill: var(--bg, #0a0a0c); stroke: var(--accent, #5b8cff); stroke-width: 1.4; }
+.diagram-wrap svg .edge-step text { fill: var(--accent, #5b8cff); font-weight: 700; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+.diagram-wrap svg .edge-step.edge-dim { opacity: 0.25; }
 /* edge text placed by the viewer along each edge (labels: along) */
 .diagram-wrap svg .edge-note rect { fill: var(--panel, #101014); stroke: #3a3a44; stroke-width: 0.8; }
 .diagram-wrap svg .edge-note text { fill: #c9c9d1; font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; }
 .diagram-wrap svg .edge-note.dashed text { fill: #9a9aa3; }
-/* legend for list mode: the numbered story reads top to bottom */
-.edge-legend { margin: 14px auto 10px; max-width: 1100px; font-size: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 6px 28px; }
-.edge-legend b { display: block; margin: 8px 0 4px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
-.edge-legend ol, .edge-legend ul { margin: 0; padding-left: 26px; }
-.edge-legend li { margin: 3px 0; line-height: 1.45; }
-.edge-legend .el-from, .edge-legend .el-to { opacity: 0.75; }
-.edge-legend .el-text { display: block; }
 .comp-legend {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
