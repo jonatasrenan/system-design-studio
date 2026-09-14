@@ -41,9 +41,20 @@ const dry = args.includes('--dry-run');
 const quiet = args.includes('--quiet');
 const off = args.includes('--off');
 const del = args.includes('--delete');
+// optional links for the published page's top bar: where the reader came from and the
+// sibling version of the same design (another language, say). Stored in meta.share so
+// every republish keeps them; a session without them gets no bar at all.
+const flagValue = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const backLink = flagValue('--back') ? { url: flagValue('--back'), label: flagValue('--back-label') || '← back' } : undefined;
+const altLink = flagValue('--alt') ? { url: flagValue('--alt'), label: flagValue('--alt-label') || flagValue('--alt') } : undefined;
 const log = (...a) => !quiet && console.log(...a);
 if (!target) {
-  console.error('usage: node tools/share.mjs <slug|path> [--dry-run|--off|--delete|--quiet]');
+  console.error(
+    'usage: node tools/share.mjs <slug|path> [--dry-run|--off|--delete|--quiet] [--back <url> --back-label <text>] [--alt <url> --alt-label <text>]'
+  );
   process.exit(1);
 }
 const dir = target.includes('/') ? path.resolve(target) : path.join(ROOT, 'sessions', target);
@@ -109,12 +120,24 @@ if (!meta.uuid) {
 }
 const shareUrl = `${BASE_URL || 'https://exemplo.invalid'}/${meta.uuid}/index.html`; // no SD_SHARE_BASE only happens on dry-run
 if (!meta.share || meta.share.url !== shareUrl) {
-  meta.share = { url: shareUrl, auto: meta.share?.auto ?? true };
+  meta.share = { ...(meta.share ?? {}), url: shareUrl, auto: meta.share?.auto ?? true };
   if (!dry) {
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
     log(`sharing: ${shareUrl}`);
   }
 }
+if (backLink || altLink) {
+  if (backLink) meta.share.back = backLink;
+  if (altLink) meta.share.alt = altLink;
+  if (!dry) fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
+}
+const escAttr = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const siteBar =
+  meta.share.back || meta.share.alt
+    ? `<nav class="site-bar">${meta.share.back ? `<a href="${escAttr(meta.share.back.url)}">${escAttr(meta.share.back.label)}</a>` : '<span></span>'}${
+        meta.share.alt ? `<a href="${escAttr(meta.share.alt.url)}" class="alt">${escAttr(meta.share.alt.label)}</a>` : ''
+      }</nav>\n`
+    : '';
 
 // --- collecting the session's data ---
 const files = fs
@@ -176,7 +199,7 @@ const html = `<!doctype html>
 <style>${css}</style>
 </head>
 <body>
-<header>
+${siteBar}<header>
   <h1>${meta.title} - jonatasrenan</h1>
   <select id="session-select" title="Session"></select>
   <span id="session-badges"></span>
