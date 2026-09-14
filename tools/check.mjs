@@ -260,12 +260,12 @@ function extractNumUnitTokens(text) {
 // here is a programming error, not something to fail silently on).
 const RULES = [
   { id: 'subgraphs', output: 'FAIL', requires: 'diagram.mmd groups nodes into at least 2 subgraphs' },
-  { id: 'coverage', output: 'FAIL', requires: 'every non-actor diagram node has a scorecard.components entry (sheet); every non-actor, non-external (🔌) node also has a scorecard.costs.items entry' },
+  { id: 'coverage', output: 'FAIL', requires: 'every non-actor diagram node has a scorecard.components entry (sheet); every non-actor, non-external (🔌) node also has a scorecard.costs.items entry; a sheet with no diagram node is reported as a warning (orphan)' },
   { id: 'queue', output: 'FAIL', requires: 'every queue/topic node (diagram + its sheet) declares a DLQ+reprocessing path, or an explicit accepted loss' },
   { id: 'flow-start', output: 'FAIL', requires: 'the "1·" numbered edge starts at an actor (the clients subgraph)' },
   { id: 'direction', output: 'warning', requires: 'no numbered edge whose label starts with an HTTP status code or response/returns (resposta/devolve/retorna) — a response drawn as the initiative' },
   { id: 'emoji', output: 'warning', requires: 'every diagram node label includes one of the taxonomy emoji' },
-  { id: 'zoom', output: 'warning', requires: 'node labels ≤ 3 lines and the diagram ≤ 15 nodes (a 16th node is the signal to add a system node + a zoom sub-diagram, not to merge unrelated components)' },
+  { id: 'zoom', output: 'warning', requires: 'node labels ≤ 3 lines and the diagram ≤ 18 nodes (past that, add a system node + a zoom sub-diagram — never merge unrelated components to fit)' },
   { id: 'telemetry', output: 'warning', requires: 'no node that looks like a generic telemetry/observability collector' },
   { id: 'actors', output: 'warning', requires: 'at least one actor besides the end user' },
   { id: 'jargon', output: 'FAIL', requires: 'no internal-mechanics jargon (commands, skills, work rituals) in any session .md, unless scoped-exempted in meta.json allowed_jargon with a non-empty reason' },
@@ -406,8 +406,13 @@ function lintSession(slug) {
           'telemetry',
           `node "${n.id}" looks like telemetry collection — universal collection isn't drawn (signals live in operations); keep it only if it's a component of the problem itself`
         );
-    if (nodes.length > 15)
-      warning('zoom', `diagram with ${nodes.length} nodes (budget: 15 — add a system node + a zoom sub-diagram rather than merging unrelated components)`);
+    if (nodes.length > 18)
+      warning('zoom', `diagram with ${nodes.length} nodes (budget: 18 — add a system node + a zoom sub-diagram rather than merging unrelated components)`);
+    // the reverse of the coverage check: a sheet whose node was merged away or renamed is an
+    // orphan — its cost still counts in the total while the diagram no longer shows the component
+    for (const c of comps)
+      if (!nodes.some((n) => !isActor(n) && matches(n.label, c.name)))
+        warning('coverage', `component "${c.name}" has a sheet but no diagram node (orphaned when a node was merged or renamed?)`);
     const numbered = edges.filter((e) => /^"?\s*\d+\s*[·.]/.test(e.label));
     if (!numbered.length) fail('flow-start', 'no numbered edge — the main flow must tell the story (1·, 2·…)');
     else {

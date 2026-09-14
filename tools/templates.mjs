@@ -42,7 +42,8 @@ _(every line shows the math, not just the result)_
   domain: [
     '25-domain.md',
     `<!-- lint contract (tools/check.mjs --lint), evaluated after HTML comments are
-stripped from the file — this block itself is never read as content:
+stripped from the file — this block itself is never read as content. Delete it
+once the stage is written (the shipped examples don't carry it):
 - Invariants: a table whose header row starts with "| ID |"; IDs follow the
   pattern INV-n; no data cell may be left empty; the "Prevention" column only
   accepts one of prevented in the database / prevented in code / detected
@@ -109,7 +110,8 @@ _(one <details> per topic: cache, failures, consistency...)_
   ],
   'data-model': [
     '35-data-model.md',
-    `<!-- lint contract (tools/check.mjs --lint): to declare a state enum on an
+    `<!-- lint contract (tools/check.mjs --lint) — delete this block once the stage is
+written (the shipped examples don't carry it): to declare a state enum on an
 erDiagram attribute, name the attribute so it contains "state" and add a
 comment right after it with the possible values, lowercase, in the design's
 own language, separated by "|" (e.g. a "reserved|confirmed|expired"
