@@ -7,17 +7,17 @@ import { TEMPLATE_BY_FILE } from './templates.mjs';
 // pipeline order: a change at i invalidates any untouched j > i.
 // This is also the tab order in the viewer.
 export const ORDER = [
-  '00-problema.md',
-  '10-requisitos.md',
-  '20-estimativas.md',
-  '25-dominio.md',
+  '00-problem.md',
+  '10-requirements.md',
+  '20-estimates.md',
+  '25-domain.md',
   '30-design.md',
-  '35-modelo-de-dados.md',
+  '35-data-model.md',
   '40-tradeoffs.md',
-  '50-operacao.md',
+  '50-operations.md',
   'diagram.mmd',
   'scorecard.json',
-  '90-duvidas.md',
+  '90-faq.md',
   '45-review.md',
   '70-poc.md',
 ];
@@ -34,7 +34,7 @@ export const RETIRED_STAGES = ['60-avaliacao.md'];
 // boundary decides transaction boundary, transaction boundary decides row grain)
 // but are only proposed by default when the dominant risk of the session is
 // data-shaped — see the design skill.
-export const OPTIONAL = ['25-dominio.md', '35-modelo-de-dados.md', '70-poc.md', '90-duvidas.md'];
+export const OPTIONAL = ['25-domain.md', '35-data-model.md', '70-poc.md', '90-faq.md'];
 
 export const hashFile = (p) =>
   crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 16);
@@ -50,8 +50,11 @@ export function stripHtmlComments(text) {
 
 // Internal jargon that must not leak into shareable artifacts (see CLAUDE.md).
 // "baseline" alone is a legitimate technical term — only command forms and internal names count.
+// Bilingual on purpose: sessions are written in English by default, but the
+// existing ones are in Portuguese — the conversational/process voice has to be
+// caught in both languages, never only in the one the studio happens to default to.
 export const JARGON =
-  /\/(design|review|mesa|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard)\.mjs|scorecard\.json|learnings\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento/i;
+  /\/(design|review|mesa|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard|migrate)\.mjs|scorecard\.json|learnings\.md|patterns\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento|\b(first|second|next) pass\b|\bpass (1|2|light|preliminary|reference)\b|correct me if|in this review|preliminary review|left for (the )?polish/i;
 
 // Lightweight parser for diagram.mmd (flowchart): nodes with label/shape/subgraph, and edges.
 // Covers the shapes used in this repo: id["x"] id[(x)] id[[x]] id((x)) id{x} id(x) id[x].
@@ -108,10 +111,10 @@ export function stageStatus(dir) {
   } catch {}
   const stages = [];
   let upstreamChanged = false;
-  // CONTENT state of the review: open FALHAs in the guardrails turn the stage red
-  let falhasAbertas = 0;
+  // CONTENT state of the review: open FAILs in the guardrails turn the stage red
+  let openFails = 0;
   try {
-    falhasAbertas = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'))?.guardrails?.falha ?? 0;
+    openFails = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'))?.guardrails?.fail ?? 0;
   } catch {}
   for (const name of ORDER) {
     const p = path.join(dir, name);
@@ -158,7 +161,7 @@ export function stageStatus(dir) {
       stub = false;
     }
     // review only "closes" (green) once every item is PASS/N-A; staleness (desatualizado) takes priority
-    if (name === '45-review.md' && exists && falhasAbertas > 0 && status !== 'desatualizado') {
+    if (name === '45-review.md' && exists && openFails > 0 && status !== 'desatualizado') {
       status = 'falhas';
       stub = false;
     }
@@ -170,7 +173,7 @@ export function stageStatus(dir) {
 // User memory (learnings/padrões) is personal and stays out of version control:
 // the repository versions only the `.template.md` files. Create on first need.
 export function ensureMemoryFiles(root) {
-  for (const name of ['learnings.md', 'padroes.md']) {
+  for (const name of ['learnings.md', 'patterns.md']) {
     const file = path.join(root, name);
     if (fs.existsSync(file)) continue;
     const tpl = path.join(root, name.replace(/\.md$/, '.template.md'));

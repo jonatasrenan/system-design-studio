@@ -1,8 +1,8 @@
 // Creates session stages from the templates (ready-made headings, the LLM only fills them in).
 // Usage: node tools/stage.mjs <slug> <stage> [<stage>...] [--print]
-//   stages: requisitos | estimativas | dominio | design | modelo | tradeoffs |
-//           operacao | duvidas | poc
-//   (dominio and modelo are optional, causally placed stages — see pipeline.mjs
+//   stages: requirements | estimates | domain | design | data-model | tradeoffs |
+//           operations | faq | poc
+//   (domain and data-model are optional, causally placed stages — see pipeline.mjs
 //   ORDER/OPTIONAL and the design skill for when they're proposed by default)
 // Idempotent: an existing file isn't overwritten. Updates meta.updated once.
 // --print: does NOT create a file — prints the templates to stdout. Use this when you'll
