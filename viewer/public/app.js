@@ -43,15 +43,15 @@ const withDirection = (src, dir) =>
 
 // Edge labels are what makes a busy map grow sideways: ELK lays every label out on
 // one line next to its edge, so 27 labelled edges cost more width than 15 nodes.
-// Compact mode keeps only the step number on numbered edges ("3·") and moves the
-// text to a legend under the map — the story reads top to bottom instead of
-// being scattered along the edges.
+// The layout therefore never sees the text: the viewer draws a numbered marker on
+// each step edge and shows the text on hover ('hover', default) or draws it along
+// the edge ('along').
 const DIAGRAM_LABELS_KEY = 'sd-diagram-labels';
 const diagramLabelsPref = () => {
   try {
-    return localStorage.getItem(DIAGRAM_LABELS_KEY) || 'auto';
+    return localStorage.getItem(DIAGRAM_LABELS_KEY) === 'along' ? 'along' : 'hover';
   } catch {
-    return 'auto';
+    return 'hover';
   }
 };
 const EDGE_RE = /^(\s*)([A-Za-z0-9_]+)\s*(-->|-\.->|==>)\s*\|([^|]+)\|\s*([A-Za-z0-9_]+)\s*$/;
@@ -65,35 +65,52 @@ function edgeList(src) {
   }
   return edges;
 }
-const compactEdgeLabels = (src) =>
+// The layout runs with no edge labels at all (the layout engine drops a purely
+// numeric label anyway); the step numbers are drawn by the viewer as markers.
+const stripEdgeLabels = (src) =>
   src
     .split('\n')
     .map((raw) => {
       const m = raw.match(EDGE_RE);
-      if (!m) return raw;
-      const n = m[4].match(/^\s*(\d+)\s*[·.]/);
-      return n ? `${m[1]}${m[2]} ${m[3]}|${n[1]}·| ${m[5]}` : `${m[1]}${m[2]} ${m[3]} ${m[5]}`;
+      return m ? `${m[1]}${m[2]} ${m[3]} ${m[5]}` : raw;
     })
     .join('\n');
+// step-number markers at the midpoint of each numbered edge; returns one entry per
+// path (null where the edge has no number) so hover handlers can use them
+function drawStepMarkers(svg, src) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const edges = edgeList(src);
+  svg.querySelectorAll('.edge-step').forEach((e) => e.remove());
+  const paths = [...svg.querySelectorAll('path.flowchart-link')];
+  return paths.map((p, i) => {
+    const cls = p.className.baseVal;
+    const from = (cls.match(/LS-([A-Za-z0-9_]+)/) || [])[1];
+    const to = (cls.match(/LE-([A-Za-z0-9_]+)/) || [])[1];
+    const e = edges[i] && edges[i].from === from && edges[i].to === to ? edges[i] : edges.find((x) => x.from === from && x.to === to);
+    if (!e || e.n === null) return null;
+    const pt = p.getPointAtLength(p.getTotalLength() * 0.5);
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'edge-step');
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', pt.x);
+    c.setAttribute('cy', pt.y);
+    c.setAttribute('r', 10);
+    const t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', pt.x);
+    t.setAttribute('y', pt.y + 3.5);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-size', 10);
+    t.textContent = String(e.n);
+    g.append(c, t);
+    svg.appendChild(g);
+    return g;
+  });
+}
 // node id → label text (first line, emoji kept), for the legend
 function nodeNames(src) {
   const names = {};
   for (const m of src.matchAll(/^\s*([A-Za-z0-9_]+)\[([^\]]*)\]/gm)) names[m[1]] = m[2].split('<br>')[0].replace(/^"|"$/g, '').trim();
   return names;
-}
-function edgeLegendHtml(src) {
-  const edges = edgeList(src);
-  const names = nodeNames(src);
-  const name = (id) => esc(names[id] ?? id);
-  const numbered = edges.filter((e) => e.n !== null).sort((a, b) => a.n - b.n);
-  const others = edges.filter((e) => e.n === null);
-  if (!numbered.length && !others.length) return '';
-  const li = (e) =>
-    `<li><span class="el-from">${name(e.from)}</span> → <span class="el-to">${name(e.to)}</span><span class="el-text">${esc(e.text)}</span></li>`;
-  return `<div class="edge-legend">
-    ${numbered.length ? `<b>The story of a request</b><ol>${numbered.map((e) => `<li value="${e.n}">${li(e).slice(4)}`).join('')}</ol>` : ''}
-    ${others.length ? `<b>Other edges</b><ul>${others.map(li).join('')}</ul>` : ''}
-  </div>`;
 }
 
 // Full labels, placed by us: the layout runs with number-only edge labels (tight),
@@ -174,7 +191,7 @@ function overlayEdgeLabels(svg, src) {
 // shows up when the pointer is over the line (or its number), with that edge lit
 // and the rest dimmed — the same tooltip the nodes use. A wide invisible stroke
 // over each path makes a 1px line hoverable.
-function attachEdgeTooltips(container, src) {
+function attachEdgeTooltips(container, src, markers = []) {
   const edges = edgeList(src);
   if (!edges.length) return;
   if (!tipEl) {
@@ -184,7 +201,7 @@ function attachEdgeTooltips(container, src) {
   }
   const names = nodeNames(src);
   const paths = [...container.querySelectorAll('path.flowchart-link')];
-  const labels = [...container.querySelectorAll('.edgeLabels > g')];
+  const labels = markers; // one per path, null where the edge has no step number
   const allPaths = [...container.querySelectorAll('.edgePaths path')];
   const place = (e) => {
     const pad = 14;
@@ -211,15 +228,15 @@ function attachEdgeTooltips(container, src) {
         p2.classList.toggle('edge-hl', p2 === p);
         p2.classList.toggle('edge-dim', p2 !== p && !p2.classList.contains('edge-hit'));
       });
-      labels.forEach((l, j) => l.classList.toggle('edge-dim', j !== i));
+      labels.forEach((l, j) => l && l.classList.toggle('edge-dim', j !== i));
       tipEl.innerHTML =
-        `<b>${e.n !== null ? `${e.n}· ` : ''}${esc(names[from] ?? from)} → ${esc(names[to] ?? to)}</b>` + `<span>${esc(e.text)}</span>`;
+        `<b>${e.n !== null ? `${e.n} — ` : ''}${esc(names[from] ?? from)} → ${esc(names[to] ?? to)}</b>` + `<span>${esc(e.text)}</span>`;
       tipEl.style.display = 'block';
       place(ev);
     };
     const hide = () => {
       allPaths.forEach((p2) => p2.classList.remove('edge-hl', 'edge-dim'));
-      labels.forEach((l) => l.classList.remove('edge-dim'));
+      labels.forEach((l) => l && l.classList.remove('edge-dim'));
       tipEl.style.display = 'none';
     };
     for (const target of [hit, labels[i]].filter(Boolean)) {
@@ -484,12 +501,12 @@ async function renderTab() {
       const labelsPref = diagramLabelsPref();
       content.innerHTML = `<div class="diagram-zoom">
           <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
-          <button data-labels title="Edge labels — hover: step numbers on the map, full text when the pointer is over a line; along: text placed along each edge; full: the layout engine places every label (wide); list: text in a legend below">labels: ${labelsPref === 'auto' ? 'hover' : labelsPref}</button>
+          <button data-labels title="${labelsPref === 'along' ? 'Edge text drawn along each edge — click to show it only on hover' : 'Edge text shows when the pointer is over a line or a step number — click to draw it on the map'}">${labelsPref === 'along' ? 'text: on map' : 'text: on hover'}</button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
-        </div><div class="diagram-wrap"></div><div class="edge-legend-slot"></div>${legend}`;
+        </div><div class="diagram-wrap"></div>${legend}`;
       content.querySelector('[data-dir]').onclick = () => {
         try {
           localStorage.setItem(DIAGRAM_DIR_KEY, dir === 'TB' ? 'LR' : 'TB');
@@ -497,7 +514,7 @@ async function renderTab() {
         renderTab();
       };
       content.querySelector('[data-labels]').onclick = () => {
-        const next = { auto: 'along', along: 'full', full: 'list', list: 'auto' }[labelsPref] || 'auto';
+        const next = labelsPref === 'along' ? 'hover' : 'along';
         try {
           localStorage.setItem(DIAGRAM_LABELS_KEY, next);
         } catch {}
@@ -505,14 +522,14 @@ async function renderTab() {
       };
       try {
         const wrap = content.querySelector('.diagram-wrap');
-        // 'full' lets the layout engine place every label; the other two modes lay out
-        // with step numbers only and add the text afterwards (along the edges, or as a list)
-        const src = labelsPref === 'full' ? s.diagram : compactEdgeLabels(s.diagram);
-        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src, { direction: dir });
+        // the layout never sees edge text: the viewer draws the step markers and, on
+        // request, the text along each edge; the full text is always one hover away
+        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, stripEdgeLabels(s.diagram), { direction: dir });
         wrap.innerHTML = svg;
-        content.querySelector('.edge-legend-slot').innerHTML = labelsPref === 'list' ? edgeLegendHtml(s.diagram) : '';
-        if (labelsPref === 'along') overlayEdgeLabels(wrap.querySelector('svg'), s.diagram);
-        if (labelsPref !== 'full') attachEdgeTooltips(wrap, s.diagram);
+        const svgEl = wrap.querySelector('svg');
+        const markers = drawStepMarkers(svgEl, s.diagram);
+        if (labelsPref === 'along') overlayEdgeLabels(svgEl, s.diagram);
+        attachEdgeTooltips(wrap, s.diagram, markers);
         setupDiagramZoom(content, wrap);
         // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
         wrap.querySelectorAll('.edgePaths').forEach((ep) => {
