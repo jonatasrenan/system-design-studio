@@ -498,62 +498,79 @@ async function renderTab() {
           ${row('Alternatives', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
-      const dir = diagramDirection();
-      const labelsPref = diagramLabelsPref();
       content.innerHTML = `<div class="diagram-zoom">
-          <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
-          <button data-labels title="${labelsPref === 'along' ? 'Edge text drawn along each edge — click to show it only on hover' : 'Edge text shows when the pointer is over a line or a step number — click to draw it on the map'}">${labelsPref === 'along' ? 'text: on map' : 'text: on hover'}</button>
+          <button data-dir></button>
+          <button data-labels></button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
         </div><div class="diagram-wrap"></div>${legend}`;
+      const wrap = content.querySelector('.diagram-wrap');
+      const updateToggles = () => {
+        const dir = diagramDirection();
+        const labelsPref = diagramLabelsPref();
+        const d = content.querySelector('[data-dir]');
+        d.textContent = dir === 'TB' ? '↓ top-down' : '→ left-right';
+        d.title = `Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}`;
+        const l = content.querySelector('[data-labels]');
+        l.textContent = labelsPref === 'along' ? 'text: on map' : 'text: on hover';
+        l.title =
+          labelsPref === 'along'
+            ? 'Edge text drawn along each edge — click to show it only on hover'
+            : 'Edge text shows when the pointer is over a line or a step number — click to draw it on the map';
+      };
+      // a toggle re-draws only the drawing, in place: the wrap keeps its current height
+      // while the new SVG is computed, so the cards below don't jump up and back down
+      const draw = async () => {
+        updateToggles();
+        wrap.style.minHeight = `${wrap.clientHeight}px`;
+        try {
+          // the layout never sees edge text: the viewer draws the step markers and, on
+          // request, the text along each edge; the full text is always one hover away
+          const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, stripEdgeLabels(s.diagram), { direction: diagramDirection() });
+          wrap.innerHTML = svg;
+          const svgEl = wrap.querySelector('svg');
+          const markers = drawStepMarkers(svgEl, s.diagram);
+          if (diagramLabelsPref() === 'along') overlayEdgeLabels(svgEl, s.diagram);
+          attachEdgeTooltips(wrap, s.diagram, markers);
+          setupDiagramZoom(content, wrap);
+          // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
+          wrap.querySelectorAll('.edgePaths').forEach((ep) => {
+            const anchor =
+              ep.parentNode.querySelector(':scope > .edgeLabels') || ep.parentNode.querySelector(':scope > .nodes');
+            if (anchor) ep.parentNode.insertBefore(ep, anchor);
+          });
+          attachNodeTooltips(wrap, comps);
+        } catch (e) {
+          wrap.innerHTML = `<pre>${s.diagram}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
+        }
+        wrap.style.minHeight = '';
+      };
       content.querySelector('[data-dir]').onclick = () => {
         try {
-          localStorage.setItem(DIAGRAM_DIR_KEY, dir === 'TB' ? 'LR' : 'TB');
+          localStorage.setItem(DIAGRAM_DIR_KEY, diagramDirection() === 'TB' ? 'LR' : 'TB');
         } catch {}
-        renderTab();
+        draw();
       };
       content.querySelector('[data-labels]').onclick = () => {
-        const next = labelsPref === 'along' ? 'hover' : 'along';
         try {
-          localStorage.setItem(DIAGRAM_LABELS_KEY, next);
+          localStorage.setItem(DIAGRAM_LABELS_KEY, diagramLabelsPref() === 'along' ? 'hover' : 'along');
         } catch {}
-        renderTab();
+        draw();
       };
-      try {
-        const wrap = content.querySelector('.diagram-wrap');
-        // the layout never sees edge text: the viewer draws the step markers and, on
-        // request, the text along each edge; the full text is always one hover away
-        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, stripEdgeLabels(s.diagram), { direction: dir });
-        wrap.innerHTML = svg;
-        const svgEl = wrap.querySelector('svg');
-        const markers = drawStepMarkers(svgEl, s.diagram);
-        if (labelsPref === 'along') overlayEdgeLabels(svgEl, s.diagram);
-        attachEdgeTooltips(wrap, s.diagram, markers);
-        setupDiagramZoom(content, wrap);
-        // ordem de pintura: arestas atrás de rótulos e nós (fundo → arestas → rótulos → nós)
-        wrap.querySelectorAll('.edgePaths').forEach((ep) => {
-          const anchor =
-            ep.parentNode.querySelector(':scope > .edgeLabels') || ep.parentNode.querySelector(':scope > .nodes');
-          if (anchor) ep.parentNode.insertBefore(ep, anchor);
+      await draw();
+      // clique na ficha → rola até o nó no diagrama e o destaca (inverso do clique no nó)
+      content.querySelectorAll('.comp').forEach((card) => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.tr-link')) return;
+          const node = wrap.querySelector(`.node[data-comp="${card.id.slice(5)}"]`);
+          if (!node) return;
+          node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          node.classList.add('node-flash');
+          setTimeout(() => node.classList.remove('node-flash'), 1600);
         });
-        attachNodeTooltips(wrap, comps);
-        // clique na ficha → rola até o nó no diagrama e o destaca (inverso do clique no nó)
-        content.querySelectorAll('.comp').forEach((card) => {
-          card.addEventListener('click', (e) => {
-            if (e.target.closest('.tr-link')) return;
-            const node = wrap.querySelector(`.node[data-comp="${card.id.slice(5)}"]`);
-            if (!node) return;
-            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            node.classList.add('node-flash');
-            setTimeout(() => node.classList.remove('node-flash'), 1600);
-          });
-        });
-      } catch (e) {
-        content.querySelector('.diagram-wrap').innerHTML =
-          `<pre>${s.diagram}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
-      }
+      });
       content.querySelectorAll('.tr-link').forEach((a) => {
         a.onclick = async () => {
           await manualNav(a.dataset.tab);
