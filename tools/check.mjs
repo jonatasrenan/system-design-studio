@@ -265,7 +265,7 @@ const RULES = [
   { id: 'flow-start', output: 'FAIL', requires: 'the "1·" numbered edge starts at an actor (the clients subgraph)' },
   { id: 'direction', output: 'warning', requires: 'no numbered edge whose label starts with an HTTP status code or response/returns (resposta/devolve/retorna) — a response drawn as the initiative' },
   { id: 'emoji', output: 'warning', requires: 'every diagram node label includes one of the taxonomy emoji' },
-  { id: 'zoom', output: 'warning', requires: 'node labels ≤ 3 lines and the diagram ≤ ~15 nodes' },
+  { id: 'zoom', output: 'warning', requires: 'node labels ≤ 3 lines and the diagram ≤ 15 nodes (a 16th node is the signal to add a system node + a zoom sub-diagram, not to merge unrelated components)' },
   { id: 'telemetry', output: 'warning', requires: 'no node that looks like a generic telemetry/observability collector' },
   { id: 'actors', output: 'warning', requires: 'at least one actor besides the end user' },
   { id: 'jargon', output: 'FAIL', requires: 'no internal-mechanics jargon (commands, skills, work rituals) in any session .md, unless scoped-exempted in meta.json allowed_jargon with a non-empty reason' },
@@ -407,7 +407,7 @@ function lintSession(slug) {
           `node "${n.id}" looks like telemetry collection — universal collection isn't drawn (signals live in operations); keep it only if it's a component of the problem itself`
         );
     if (nodes.length > 15)
-      warning('zoom', `diagram with ${nodes.length} nodes (budget: ~15 — consider a system-node + a zoom sub-diagram)`);
+      warning('zoom', `diagram with ${nodes.length} nodes (budget: 15 — add a system node + a zoom sub-diagram rather than merging unrelated components)`);
     const numbered = edges.filter((e) => /^"?\s*\d+\s*[·.]/.test(e.label));
     if (!numbered.length) fail('flow-start', 'no numbered edge — the main flow must tell the story (1·, 2·…)');
     else {
