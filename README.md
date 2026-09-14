@@ -13,6 +13,8 @@ node viewer/server.mjs        # panel at http://localhost:4400 (PORT changes the
 claude                        # in another terminal, at the repo root
 ```
 
+New to the studio? **[FLUXO.md](FLUXO.md)** is the end-to-end usage guide: a diagram of the whole flow, a step-by-step of what to say and what to expect, and a table of "signs you're off the rails and what to do".
+
 The commands below are skills in `.claude/skills/`: they become available by running `claude` from this repository's root (and trusting the directory when it asks), together with the instructions in `CLAUDE.md` and the consistency hook in `.claude/settings.json`.
 
 | Command | What it does |

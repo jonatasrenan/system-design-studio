@@ -3,9 +3,10 @@
 // Two kinds of checks, both deterministic:
 //  - structural: valid meta.json/scorecard.json; a "concluido" session requires
 //    a review to be present and guardrails with no FALHA.
-//  - staleness: the pipeline is a linear DAG (problem → requirements → estimates
-//    → design → trade-offs → operations → diagram/scorecard → questions → review
-//    → poc → evaluation; the canonical order is ORDER, in pipeline.mjs).
+//  - staleness: the pipeline is a linear DAG — the canonical order is ORDER, in
+//    pipeline.mjs (also restated in prose in CLAUDE.md; the [dag-prosa] predicate
+//    below keeps that prose from drifting out of sync with ORDER — read ORDER
+//    itself for the order, never copy it a third time).
 //    A per-session `.state.json` stores the hashes of the last consistent state
 //    (baseline). If an upstream file changed since the baseline and some downstream
 //    file didn't, the downstream file is potentially stale — the agent needs to
