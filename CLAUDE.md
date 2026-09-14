@@ -89,7 +89,7 @@ The session's executive panel. Fill in the blocks **as the data closes in the co
                    "why": "the decision that put it there, 1-2 lines",
                    "rejected": ["short labels of the discarded options"], "tradeoff": "#3" }],
   "costs":    { "unit": "USD/mês", "items": [{ "component": "…", "cost": 450, "cost10x": 3800, "notes": "assumption behind the math" }] },
-  "guardrails": { "pass": 0, "falha": 0, "na": 0, "falhas": ["summary of each open FALHA"] },
+  "guardrails": { "pass": 0, "falha": 0, "na": 0, "premissas": 0, "riscos": 0, "falhas": ["summary of each open FALHA"] },
   "rubric":   { "overall": 0, "scores": [{ "criterio": "…", "nota": 0 }] },
   "risks":    ["accepted risks / conscious out-of-scope calls"]
 }
@@ -105,7 +105,7 @@ Pipeline files become tabs in the DAG order above, with fixed labels (Problem, R
 
 ## Guardrails
 
-The root `guardrails.md` is the quality gate: a checklist of failure classes (SPOF, idempotency, backpressure, hot keys, retry storm, DR, migrations…). No session goes to `status: "concluido"` with an open FALHA: the check blocks while `guardrails.falha` is greater than zero. A FALHA the user accepts as a conscious risk **leaves the count** — it becomes an entry in `risks` and a recorded decision in `40-tradeoffs.md`; what stays in `falha` is what still has no answer. The result lives in `45-review.md` in the session.
+The root `guardrails.md` is the quality gate: 34 items across three blocks — the original failure-class checklist (SPOF, idempotency, backpressure, hot keys, retry storm, DR, migrations…), **Data & Contract**, and **Domain & Modeling**. Each item gets one of five verdicts: PASS, FALHA, N/A, `[premissa-a-validar]` (can't be judged yet — counts in `guardrails.premissas`), or RISCO ACEITO (a FALHA the user knowingly accepted — counts in `guardrails.riscos`, requires an entry in `risks` **and** a recorded decision in `40-tradeoffs.md`, never becomes PASS). `pass + falha + na + premissas + riscos` must equal 34 — the `--lint` gate enforces the closed sum. No session goes to `status: "concluido"` with an open FALHA: the check blocks while `guardrails.falha` is greater than zero; accepted risks and open premises never block it. The result lives in `45-review.md` in the session.
 
 ## Learnings and argumentário across sessions
 

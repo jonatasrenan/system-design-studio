@@ -208,9 +208,34 @@ function lintSession(slug) {
     if (entries > defesas) avisos.push(`${entries - defesas} trade-off(s) without "Defesa em 30s"`);
   }
 
+  const naoChecados = [];
+  // guardrails closed sum: pass+falha+na+premissas+riscos must equal the checklist size in
+  // guardrails.md — an item nobody has judged yet can't silently disappear from the count.
+  {
+    let guardrailsMd = '';
+    try {
+      guardrailsMd = fs.readFileSync(path.join(ROOT, 'guardrails.md'), 'utf8');
+    } catch {}
+    const totalItems = (guardrailsMd.match(/^\d+\.\s/gm) ?? []).length;
+    const g = sc?.guardrails;
+    if (!totalItems) {
+      naoChecados.push('guardrails closed sum — root guardrails.md unreadable');
+    } else if (!g) {
+      naoChecados.push('guardrails closed sum — no guardrails block in scorecard.json yet');
+    } else {
+      const { pass = 0, falha = 0, na = 0, premissas = 0, riscos = 0 } = g;
+      const sum = pass + falha + na + premissas + riscos;
+      if (sum !== totalItems)
+        falhas.push(
+          `guardrails sum is ${sum} (${pass} pass + ${falha} falha + ${na} n/a + ${premissas} premissa(s) + ${riscos} risco(s)), expected ${totalItems} — guardrails.md has ${totalItems} items`
+        );
+    }
+  }
+
   for (const f of falhas) console.log(`FALHA: ${f}`);
   for (const a of avisos) console.log(`aviso: ${a}`);
-  console.log(`\nlint: ${falhas.length} falha(s) · ${avisos.length} aviso(s)`);
+  for (const n of naoChecados) console.log(`not checked: ${n}`);
+  console.log(`\nlint: ${falhas.length} falha(s) · ${avisos.length} aviso(s) · ${naoChecados.length} not checked`);
   return falhas.length === 0;
 }
 

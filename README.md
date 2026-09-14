@@ -33,7 +33,7 @@ You can also just talk in natural language ("let's design a URL shortener") — 
 |---|---|
 | `sessions/<slug>/` | One directory per design: numbered `.md` files (become tabs), `diagram.mmd` (Mermaid, single source for the design), `scorecard.json` (executive panel), `meta.json` |
 | `rubric.md` | Interview criteria, scores 1-4 |
-| `guardrails.md` | Checklist of failure classes (SPOF, idempotency, backpressure, hot keys, DR…); no design concludes with an open failure |
+| `guardrails.md` | 34-item checklist across three blocks (failure classes, data & contract, domain & modeling); five verdicts (PASS/FALHA/N-A/premise-to-validate/accepted-risk); no design concludes with an open failure |
 | `learnings.template.md` | Seed for the memory of recurring mistakes (from `aberto` to `dominado`), which feeds back into the next sessions |
 | `argumentario.template.md` | Seed for the repertoire of decisions with the short defense ready — pre-interview review |
 | `tools/` | Deterministic mechanical IO: session and stage creation, scorecard patching, consistency checking |

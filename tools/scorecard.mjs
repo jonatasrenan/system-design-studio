@@ -15,7 +15,7 @@
 //   upsert-slos       '[{"name","target"}]'                                       (key: name)
 //   upsert-capacity   '[{"name","value"}]'                                        (key: name)
 //   add-risks         '["risk text"]'                                             (append, exact dedupe)
-//   set-guardrails    '{"pass","falha","na","falhas":[]}'
+//   set-guardrails    '{"pass","falha","na","premissas"?,"riscos"?,"falhas":[]}'   (premissas/riscos default 0)
 //   set-rubric        '{"overall","scores":[{"criterio","nota"}]}'
 //   remove-components '["name1","name2"]'   remove-costs '["component1"]'
 //
@@ -104,8 +104,14 @@ function upsert(list, items, key) {
   return `${added} added, ${updated} updated`;
 }
 
+// premissas/riscos are optional (default 0) so old scorecards without them stay valid;
+// when present they must be numbers ≥ 0, like the other three counters.
 const validGuardrails = (p) =>
-  p && ['pass', 'falha', 'na'].every((k) => typeof p[k] === 'number') && Array.isArray(p.falhas ?? []);
+  p &&
+  ['pass', 'falha', 'na'].every((k) => typeof p[k] === 'number') &&
+  ['premissas', 'riscos'].every((k) => p[k] === undefined || (typeof p[k] === 'number' && p[k] >= 0)) &&
+  Array.isArray(p.falhas ?? []);
+const normalizeGuardrails = (p) => ({ premissas: 0, riscos: 0, ...p });
 const validRubric = (p) => p && typeof p.overall === 'number' && Array.isArray(p.scores);
 const stringArray = (p) => Array.isArray(p) && p.every((x) => typeof x === 'string');
 
@@ -139,9 +145,12 @@ switch (cmd) {
     if (payload.capacity) summaries.push(`capacity: ${upsert(sc.capacity, payload.capacity, 'name')}`);
     if (payload.risks) summaries.push(`risks: ${addRisks(payload.risks)}`);
     if (payload.guardrails) {
-      if (!validGuardrails(payload.guardrails)) fail('malformed guardrails: {pass,falha,na:numbers, falhas:[...]}');
-      sc.guardrails = payload.guardrails;
-      summaries.push(`guardrails: ${payload.guardrails.pass} pass · ${payload.guardrails.falha} falha`);
+      if (!validGuardrails(payload.guardrails))
+        fail('malformed guardrails: {pass,falha,na:numbers, premissas?,riscos?:numbers >= 0, falhas:[...]}');
+      sc.guardrails = normalizeGuardrails(payload.guardrails);
+      summaries.push(
+        `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
+      );
     }
     if (payload.rubric) {
       if (!validRubric(payload.rubric)) fail('malformed rubric: {overall:number, scores:[...]}');
@@ -168,9 +177,12 @@ switch (cmd) {
     summaries.push(`risks: ${addRisks(payload)}`);
     break;
   case 'set-guardrails':
-    if (!validGuardrails(payload)) fail('malformed guardrails: {pass,falha,na:numbers, falhas:[...]}');
-    sc.guardrails = payload;
-    summaries.push(`guardrails: ${payload.pass} pass · ${payload.falha} falha · ${payload.na} n/a`);
+    if (!validGuardrails(payload))
+      fail('malformed guardrails: {pass,falha,na:numbers, premissas?,riscos?:numbers >= 0, falhas:[...]}');
+    sc.guardrails = normalizeGuardrails(payload);
+    summaries.push(
+      `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.na} n/a · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
+    );
     break;
   case 'set-rubric':
     if (!validRubric(payload)) fail('malformed rubric: {overall:number, scores:[...]}');

@@ -177,13 +177,22 @@ function renderOverview(sc) {
   const g = sc.guardrails;
   if (g) {
     const cls = g.falha > 0 ? 'bad' : '';
-    // público: sem vocabulário interno — "guardrails/pass/falha" vira linguagem de design
+    const premissas = g.premissas ?? 0;
+    const riscos = g.riscos ?? 0;
+    // extra states shown only when in use — premises/accepted risks don't count against the design,
+    // so they get the same neutral visual treatment as "n/a", never the "bad" one
+    const extra = [premissas ? `${premissas} to validate` : '', riscos ? `${riscos} accepted risk(s)` : '']
+      .filter(Boolean)
+      .join(' · ');
+    // public page: no internal vocabulary — "guardrails/pass/falha" becomes design language
     cards.push(
       STATIC
         ? `<div class="card ${cls}"><div class="card-label">Failure classes reviewed</div>
-      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} open · ${g.na ?? 0} not applicable</div></div>`
+      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} open · ${g.na ?? 0} not applicable</div>
+      ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
         : `<div class="card ${cls}"><div class="card-label">Guardrails</div>
-      <div class="card-value">${g.pass ?? 0} pass · ${g.falha ?? 0} falha · ${g.na ?? 0} n/a</div></div>`
+      <div class="card-value">${g.pass ?? 0} pass · ${g.falha ?? 0} falha · ${g.na ?? 0} n/a</div>
+      ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
     );
   }
   if (sc.rubric?.overall != null) {
