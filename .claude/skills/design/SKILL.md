@@ -30,9 +30,10 @@ You are the **interviewee's second**: you accelerate, remind, anticipate, and ch
 
 ## 0. Resolve the session
 
-- **New**: `node tools/new-session.mjs "<title>" --mode estudio` — **one call does the whole setup**: creates the session (stdout line 1 = slug), makes sure the viewer is up (if it says "started", tell the user to open http://localhost:4400), and returns the **open learnings + argumentário** in the same stdout. Use that output; do NOT health-check or Read separately.
-- **Continue**: read the `meta.json` files, offer them via AskUserQuestion, re-read the files and summarize in 3-5 lines where it left off; only here should you read `learnings.md`/`argumentario.md` and check the viewer (`curl -s localhost:4400/api/health`; down → bring it up in background).
-- `aberto` items in learnings are active alerts — flag them before the user repeats the mistake; argumentário patterns don't get re-discussed from scratch.
+- **New**: `node tools/new-session.mjs "<title>" --mode estudio` — **one call does the whole setup**: creates the session (stdout line 1 = slug), makes sure the viewer is up (if it says "started", tell the user to open http://localhost:4400), and returns the **open learnings + padrões + argumentário** in the same stdout, each bracketed by count lines (`--- N learnings abertos … ---` / `--- end of N learnings ---`) — if the two counts don't match, the output got truncated somewhere and you're missing items; re-run rather than proceed on a partial list. Use that output; do NOT health-check or Read separately.
+- **Continue**: read the `meta.json` files, offer them via AskUserQuestion, re-read the files and summarize in 3-5 lines where it left off; only here should you read `learnings.md`/`padroes.md`/`argumentario.md` and check the viewer (`curl -s localhost:4400/api/health`; down → bring it up in background).
+- `aberto` items in learnings are active alerts — flag them before the user repeats the mistake; padrões/argumentário entries don't get re-discussed from scratch.
+- **A learning is recorded on the spot, by the tool — never by editing the file as text.** The moment something in THIS session gets corrected (a defense that fell apart under a follow-up, a grain that turned out wrong, a premise the user knocked down), write it via `node tools/learnings.mjs append --session <slug>` in the same turn — don't wait for a `/grade` or a session close to remember it. A decision pattern that keeps showing up across designs (not a mistake — something already resolved well, with a ready defense) goes to `node tools/learnings.mjs append --target padroes --session <slug>` instead. An item already open that this session demonstrates solidly gets `node tools/learnings.mjs promote "<title>" --session <slug>`.
 
 ## 1. Problem
 

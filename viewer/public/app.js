@@ -59,6 +59,7 @@ const $ = (s) => document.querySelector(s);
 const state = {
   sessions: [],
   learnings: '',
+  padroes: '',
   rubric: '',
   guardrails: '',
   argumentario: '',
@@ -74,6 +75,7 @@ const GLOBAL_TABS = [
   { id: '__rubric__', label: '📋 Rubric', key: 'rubric' },
   { id: '__guardrails__', label: '🛡 Guardrails', key: 'guardrails' },
   { id: '__learnings__', label: '🧠 Learnings', key: 'learnings' },
+  { id: '__padroes__', label: '🧩 Patterns', key: 'padroes' },
   { id: '__argumentario__', label: '💬 Playbook', key: 'argumentario' },
 ];
 
@@ -581,6 +583,7 @@ async function load(keepSession = true) {
     ? {
         sessions: [{ slug: window.__DATA__.slug, title: window.__DATA__.meta?.title ?? 'design' }],
         learnings: '',
+        padroes: '',
         rubric: '',
         guardrails: '',
         argumentario: '',
@@ -589,6 +592,7 @@ async function load(keepSession = true) {
   if (seq !== loadSeq) return; // resposta atrasada de um load antigo — descarta
   state.sessions = data.sessions;
   state.learnings = data.learnings;
+  state.padroes = data.padroes;
   state.rubric = data.rubric;
   state.guardrails = data.guardrails;
   state.argumentario = data.argumentario;

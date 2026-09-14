@@ -73,7 +73,7 @@ sessions/<yyyy-mm-dd>-<slug>/
 | Deterministic review lints (diagram↔scorecard coverage, queues, numbering, jargon, budget…) | `node tools/check.mjs <slug> --lint` |
 | List every lint predicate (id, requirement, output) — the single source of truth, never read the code to find out | `node tools/check.mjs --regras` |
 | Structural eval | `node tools/eval.mjs <slug> [--golden <dir>]` |
-| Write to `learnings.md`/`argumentario.md` (append/promote/note, under lock — safe with parallel sessions) | `node tools/learnings.mjs append [--target learnings\|argumentario] --session <slug>` ← stdin with `## title` items; `promote "<title>" --session <slug>`; `note "<title>" "<text>" [--target …]` |
+| Write to `learnings.md`/`padroes.md`/`argumentario.md` (append/promote/note, validated, under lock — safe with parallel sessions) | `node tools/learnings.mjs append [--target learnings\|padroes\|argumentario] --session <slug>` ← stdin with `## title` items (learnings/padroes items missing a required field are refused, with the format in the message); `promote "<title>" --session <slug>`; `note "<title>" "<text>" [--target …]` |
 | Timeline of a conversation (tool calls × generation) | `node tools/timing.mjs --latest \| <transcript.jsonl>` |
 | Share a design (public link) | `node tools/share.mjs <slug>` — only when the user asks; afterward the viewer re-publishes on its own on every change (`--off` pauses it, `--delete` takes it down). Requires `SD_SHARE_BUCKET` and `SD_SHARE_BASE` in the environment; without them, tell the user instead of trying to publish |
 
@@ -113,12 +113,12 @@ Pipeline files become tabs in the DAG order above, with fixed labels (Problem, R
 
 The root `guardrails.md` is the quality gate: 34 items across three blocks — the original failure-class checklist (SPOF, idempotency, backpressure, hot keys, retry storm, DR, migrations…), **Data & Contract**, and **Domain & Modeling**. Each item gets one of five verdicts: PASS, FALHA, N/A, `[premissa-a-validar]` (can't be judged yet — counts in `guardrails.premissas`), or RISCO ACEITO (a FALHA the user knowingly accepted — counts in `guardrails.riscos`, requires an entry in `risks` **and** a recorded decision in `40-tradeoffs.md`, never becomes PASS). `pass + falha + na + premissas + riscos` must equal 34 — the `--lint` gate enforces the closed sum. No session goes to `status: "concluido"` with an open FALHA: the check blocks while `guardrails.falha` is greater than zero; accepted risks and open premises never block it. The result lives in `45-review.md` in the session.
 
-## Learnings and argumentário across sessions
+## Learnings and padrões across sessions
 
-The root `learnings.md` is the study's memory — items with status `aberto`/`dominado`, each linked to its origin session. `argumentario.md` is its sibling: recurring decision patterns (301 vs 302, SQL vs KV…) with the "Defesa em 30s" ready — fed by `/grade`, reviewed before interviews. Every entry in `40-tradeoffs.md` ends with a **"Defesa em 30s"** line.
+The root `learnings.md` is the study's memory of **recurring mistakes** — each item has a fixed, validated format (`node tools/learnings.mjs` refuses anything else, citing the format): `**Status**: aberto|dominado`, `**Origem**: sessions/<slug> (date)`, `**Aprendizado**` (1-3 sentences), `**Como aplicar**` (a practical trigger for next time). `padroes.md` is its sibling for **decisions already resolved**: recurring patterns (301 vs 302, SQL vs KV…) with `**Escolha**`, `**Quando muda**`, a ready `**Defesa em 30s**`, and `**Visto em**`. Every entry in `40-tradeoffs.md` also ends with a **"Defesa em 30s"** line.
 
-- **When starting or continuing any session**: read `learnings.md` and actively use the open items (in studio mode, warn before the user repeats the mistake; in interview mode, probe exactly those areas to test whether they've improved).
-- **When grading (`/grade`) or fixing something relevant**: add/update items — without duplicating; if an open item was demonstrated solidly, promote it to `dominado` citing the session that proved it.
+- **When starting or continuing any session**: `new-session.mjs`'s stdout (or a manual read of `learnings.md`/`padroes.md` when continuing) delivers every open item, bracketed by two count lines so truncation is visible — actively use them (in studio mode, warn before the user repeats the mistake; in interview mode, probe exactly those areas to test whether they've improved). An item missing its `**Status**` line is treated as open by default, never silently dropped.
+- **The moment something is corrected or a pattern repeats**, write it via `tools/learnings.mjs append --session <slug>` (or `--target padroes`) in the same turn — never by editing the file as text (parallel sessions would corrupt a concurrent write; the tool writes under a lock). If an open item was demonstrated solidly, `promote "<title>" --session <slug>`.
 
 ## Environment variables
 

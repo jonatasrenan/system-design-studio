@@ -6,6 +6,7 @@ node_modules/
 # the tools create the real files on first use — so what you clone never shows
 # up as a change to send upstream
 learnings.md
+padroes.md
 argumentario.md
 
 # sessions are personal and don't go into the repository

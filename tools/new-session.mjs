@@ -141,18 +141,36 @@ const readRoot = (n) => {
   }
 };
 const learnings = readRoot('learnings.md').replace(/```[\s\S]*?```/g, '');
+let missingStatus = 0;
 const abertos = [...learnings.matchAll(/^##\s+(.+)$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/gm)]
-  .filter(([, , body]) => /\*\*Status\*\*:\s*aberto/.test(body))
+  .filter(([, , body]) => {
+    const m = body.match(/\*\*Status\*\*:\s*(\S+)/);
+    if (!m) {
+      missingStatus++;
+      return true; // no Status line at all: safe default is OPEN, never silently dropped
+    }
+    return m[1] === 'aberto';
+  })
   .map(([, title, body]) => {
     const como = body.match(/\*\*Como aplicar\*\*:\s*(.+)/)?.[1] ?? '';
     return `- ${title.trim()}${como ? ` — ${como.trim()}` : ''}`;
   });
-console.log(`\n--- open learnings (active alerts for this session) ---`);
+// bracketed by two count lines so a caller that truncates this output (e.g. piping
+// through `head`) can tell — the counts must match, or something got cut.
+console.log(`\n--- ${abertos.length} learnings abertos (active alerts for this session — do not truncate this output) ---`);
 console.log(abertos.length ? abertos.join('\n') : '(none)');
+console.log(`--- end of ${abertos.length} learnings ---`);
+if (missingStatus)
+  console.error(`warning: ${missingStatus} learnings.md item(s) missing a **Status** line (normalize: add "- **Status**: aberto" or "dominado") — treated as open`);
 // only the entries (`## …`), never the header nor the format block
-const argumentario = readRoot('argumentario.md').replace(/```[\s\S]*?```/g, '');
-const padroes = [...argumentario.matchAll(/^##\s[\s\S]*?(?=^##\s|\s*$(?![\s\S]))/gm)].map(([e]) => e.trim());
+const entriesOf = (raw) => [...raw.replace(/```[\s\S]*?```/g, '').matchAll(/^##\s[\s\S]*?(?=^##\s|\s*$(?![\s\S]))/gm)].map(([e]) => e.trim());
+const padroes = entriesOf(readRoot('padroes.md'));
 if (padroes.length) {
-  console.log(`\n--- argumentário (patterns already mastered — don't re-discuss from scratch) ---`);
+  console.log(`\n--- padrões (decisions already resolved, with the defense ready — don't re-discuss from scratch) ---`);
   console.log(padroes.join('\n\n'));
+}
+const argumentario = entriesOf(readRoot('argumentario.md'));
+if (argumentario.length) {
+  console.log(`\n--- argumentário (patterns already mastered — don't re-discuss from scratch) ---`);
+  console.log(argumentario.join('\n\n'));
 }

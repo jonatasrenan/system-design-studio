@@ -105,7 +105,7 @@ function readSession(slug) {
   }
 }
 
-const ROOT_DOCS = ['learnings.md', 'rubric.md', 'guardrails.md', 'argumentario.md'];
+const ROOT_DOCS = ['learnings.md', 'padroes.md', 'rubric.md', 'guardrails.md', 'argumentario.md'];
 function readRootDoc(name) {
   const p = path.join(ROOT, name);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
@@ -183,6 +183,7 @@ const server = http.createServer((req, res) => {
     return json(res, 200, {
       sessions: listSessions(),
       learnings: readRootDoc('learnings.md'),
+      padroes: readRootDoc('padroes.md'),
       rubric: readRootDoc('rubric.md'),
       guardrails: readRootDoc('guardrails.md'),
       argumentario: readRootDoc('argumentario.md'),

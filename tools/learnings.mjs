@@ -1,19 +1,23 @@
-// SAFE writing to the global memory files (learnings.md / argumentario.md).
-// These two files are the only shared state between sessions that the flow
-// writes to (grade step 5b/7, review step 6). With several agents in parallel,
-// editing by text (Read → Edit) becomes a concurrent read-modify-write and loses items.
-// Here the write happens under a lock (atomic mkdir + retry), re-reading the file
-// inside the critical section, with dedupe by title.
+// SAFE writing to the global memory files (learnings.md / padroes.md / the legacy
+// argumentario.md). These are the only shared state between sessions that the flow
+// writes to. With several agents in parallel, editing by text (Read → Edit) becomes
+// a concurrent read-modify-write and loses items. Here the write happens under a
+// lock (atomic mkdir + retry), re-reading the file inside the critical section,
+// with dedupe by title, and — for learnings/padroes — format validation: an item
+// missing a required field is refused, with the expected format in the message,
+// never written half-formed.
 //
 // Usage:
-//   node tools/learnings.mjs append [--target learnings|argumentario] [--session <slug>]
-//       ← stdin: one or more markdown items starting with "## <title>" (the file's format)
-//         items whose "## <title>" already exists are skipped (with a warning) — to
-//         reinforce an existing item use `note`; to promote it use `promote`
+//   node tools/learnings.mjs append [--target learnings|padroes|argumentario] [--session <slug>]
+//       ← stdin: one or more markdown items starting with "## <title>" (the target's
+//         format — see FORMAT_HELP below). learnings/padroes items missing a required
+//         field are refused (nothing written); items whose "## <title>" already exists
+//         are skipped (with a warning) — to reinforce an existing item use `note`; to
+//         promote it use `promote`.
 //   node tools/learnings.mjs promote "<exact title>" --session <slug>
 //       changes **Status** to dominado and notes the session that proved it in **Origem**
 //   node tools/learnings.mjs note "<exact title>" "<text>" [--target ...]
-//       appends " · <text>" to the end of the **Origem** line (e.g., "recurred in sessions/<slug>")
+//       appends " · <text>" to the end of the **Origem**/**Visto em** line
 //   [--file <path>] overrides the target (tests); [--quiet] only prints errors.
 // Always idempotent by title; never rewrites existing items beyond the field requested.
 import fs from 'node:fs';
@@ -34,10 +38,42 @@ const [cmd, a1, a2] = positional;
 const quiet = args.includes('--quiet');
 const target = opt('--target') ?? 'learnings';
 const session = opt('--session');
-const FILES = { learnings: 'learnings.md', argumentario: 'argumentario.md' };
+const FILES = { learnings: 'learnings.md', padroes: 'padroes.md', argumentario: 'argumentario.md' };
 if (!cmd || !['append', 'promote', 'note'].includes(cmd) || !FILES[target]) {
-  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|argumentario] [--session <slug>]');
+  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|padroes|argumentario] [--session <slug>]');
   process.exit(1);
+}
+
+// Required fields per target, and the format shown to whoever gets refused. Only
+// learnings/padroes are validated — argumentario is the legacy format on its way
+// out (see the harness's product-scope issue) and was never validated either.
+const REQUIRED_FIELDS = {
+  learnings: ['Status', 'Origem', 'Aprendizado', 'Como aplicar'],
+  padroes: ['Escolha', 'Quando muda', 'Defesa em 30s', 'Visto em'],
+};
+const FORMAT_HELP = {
+  learnings: `## <short theme>
+- **Status**: aberto | dominado
+- **Origem**: sessions/<slug> (date)
+- **Aprendizado**: what became clear, in 1-3 sentences
+- **Como aplicar**: practical trigger for next time`,
+  padroes: `## <decision pattern>
+- **Escolha**: what was chosen
+- **Quando muda**: what would flip the decision
+- **Defesa em 30s**: the ready articulation, with the nuance that makes the difference
+- **Visto em**: sessions/<slug> (date)`,
+};
+// Missing fields for a block, or null if it's valid (or the target isn't validated).
+function missingFields(block, tgt) {
+  const required = REQUIRED_FIELDS[tgt];
+  if (!required) return null;
+  const missing = required.filter((f) => !new RegExp(`^-\\s*\\*\\*${f.replace(/\s/g, '\\s+')}\\*\\*:\\s*\\S`, 'm').test(block));
+  if (missing.length) return missing;
+  if (tgt === 'learnings') {
+    const m = block.match(/^-\s*\*\*Status\*\*:\s*(.+)$/m);
+    if (m && !/^(aberto|dominado)\s*$/.test(m[1].trim())) return ['Status (must be exactly "aberto" or "dominado")'];
+  }
+  return null;
 }
 ensureMemoryFiles(ROOT);
 const file = opt('--file') ? path.resolve(opt('--file')) : path.join(ROOT, FILES[target]);
@@ -147,10 +183,19 @@ await withLock(() => {
         continue;
       }
       let block = newLines.slice(it.start, it.end).join('\n').trimEnd();
-      // automatic origin when the block didn't bring one (learnings) — session was informed
+      // auto-fill Origem/Visto em from --session when the block didn't bring one —
+      // BEFORE validating, since that's what lets a caller omit it when --session is given
       if (session && target === 'learnings' && !/\*\*Origem\*\*/.test(block))
         block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origem**: ${origem}`);
-      if (session && target === 'argumentario' && !/\*\*Visto em\*\*/.test(block)) block += `\n- **Visto em**: ${origem}`;
+      if (session && (target === 'padroes' || target === 'argumentario') && !/\*\*Visto em\*\*/.test(block))
+        block += `\n- **Visto em**: ${origem}`;
+      const missing = missingFields(block, target);
+      if (missing) {
+        console.error(
+          `append: "${it.title}" is missing ${missing.join(', ')} — ${target} items must follow this format:\n\n${FORMAT_HELP[target]}`
+        );
+        process.exit(1); // nothing written — a batch with one malformed item writes nothing, not a partial result
+      }
       blocks.push(block);
     }
     if (!blocks.length) return log('nothing to append');

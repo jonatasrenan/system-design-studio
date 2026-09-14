@@ -171,7 +171,7 @@ export function stageStatus(dir) {
 // User memory (learnings/argumentário) is personal and stays out of version control:
 // the repository versions only the `.template.md` files. Create on first need.
 export function ensureMemoryFiles(root) {
-  for (const name of ['learnings.md', 'argumentario.md']) {
+  for (const name of ['learnings.md', 'padroes.md', 'argumentario.md']) {
     const file = path.join(root, name);
     if (fs.existsSync(file)) continue;
     const tpl = path.join(root, name.replace(/\.md$/, '.template.md'));

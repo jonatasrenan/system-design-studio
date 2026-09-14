@@ -35,13 +35,14 @@ You can also just talk in natural language ("let's design a URL shortener") — 
 | `rubric.md` | Interview criteria, scores 1-4 |
 | `guardrails.md` | 34-item checklist across three blocks (failure classes, data & contract, domain & modeling); five verdicts (PASS/FALHA/N-A/premise-to-validate/accepted-risk); no design concludes with an open failure |
 | `learnings.template.md` | Seed for the memory of recurring mistakes (from `aberto` to `dominado`), which feeds back into the next sessions |
+| `padroes.template.md` | Seed for decisions already resolved across designs, each with the short defense ready |
 | `argumentario.template.md` | Seed for the repertoire of decisions with the short defense ready — pre-interview review |
 | `tools/` | Deterministic mechanical IO: session and stage creation, scorecard patching, consistency checking |
 | `viewer/` | Node server with a file watcher + SSE, and the panel's front end |
 | `.env.example` | Seed for personal configuration (bucket, distribution, AWS profile, port) |
 | `CLAUDE.md` | The instructions that drive the agent: phases, propagation protocol, writing rules |
 
-**What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md` and `argumentario.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can study on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
+**What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md`, `padroes.md`, and `argumentario.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can study on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
 
 ## Two pieces that deserve an explanation
 
