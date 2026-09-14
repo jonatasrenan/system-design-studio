@@ -93,7 +93,7 @@ fs.writeFileSync(
   ) + '\n'
 );
 
-// (no 00-problema.md stub: the LLM writes it in full right after —
+// (no 00-problem.md stub: the LLM writes it in full right after —
 //  a stub would only have cost a Read-before-Write)
 
 console.log(slug);

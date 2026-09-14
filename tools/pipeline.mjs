@@ -30,7 +30,7 @@ export const ORDER = [
 export const RETIRED_STAGES = ['60-avaliacao.md'];
 
 // optional stages: absence never fails the check (not even in a completed session).
-// 25-dominio.md and 35-modelo-de-dados.md sit in causal DAG position (aggregate
+// 25-domain.md and 35-data-model.md sit in causal DAG position (aggregate
 // boundary decides transaction boundary, transaction boundary decides row grain)
 // but are only proposed by default when the dominant risk of the session is
 // data-shaped — see the design skill.
