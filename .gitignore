@@ -14,6 +14,13 @@ argumentario.md
 # sessions are personal and don't go into the repository
 sessions/*
 !sessions/.gitkeep
+# the example designs shipped with the repository (see README "Examples")
+!sessions/2026-08-19-heimdall-fleet-health-measurement
+!sessions/2026-08-19-heimdall-fleet-health-measurement-pt
+!sessions/2026-08-19-bifrost-agent-driven-repo-fixes
+!sessions/2026-08-19-bifrost-agent-driven-repo-fixes-pt
+!sessions/2026-08-19-magic-deploy-secure-publishing
+!sessions/2026-08-19-magic-deploy-secure-publishing-pt
 
 # personal configuration (bucket, distribution, AWS profile) — the repository
 # versions only .env.example

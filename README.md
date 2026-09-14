@@ -42,6 +42,18 @@ You can also just talk in natural language ("let's design a URL shortener") — 
 
 **What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md` and `patterns.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can build on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
 
+## Examples
+
+Three real designs ship with the repository, each in English and in Portuguese (`-pt`), so a fresh clone opens the panel with something to read:
+
+| Design | What it is |
+|---|---|
+| `2026-08-19-heimdall-fleet-health-measurement` | A measurement platform for a multi-account cloud fleet: collection → findings → indicators → per-owner metrics |
+| `2026-08-19-bifrost-agent-driven-repo-fixes` | Repository fixes executed by coding agents from change documents, with human gates before analysis is trusted and before merge |
+| `2026-08-19-magic-deploy-secure-publishing` | Safe publishing of AI-generated internal apps by non-developers: a seven-state pipeline, a blocking review and isolated sandboxes |
+
+They are complete designs, not toy examples: every tab is filled, the diagram has a sheet and a cost line per component, and the adversarial review was run against the full 34-item checklist. The review found real gaps in each one (index-less queries, unbounded responses, invariants enforced only in code, retention without a purge…), so all three sit in `status: in-progress` with open `FAIL` items — that is the harness doing its job, and a good place to start if you want to see what a propagation or a review looks like. Start the panel, open one, and read the trade-offs tab first.
+
 ## Two pieces that deserve an explanation
 
 **Premise propagation.** The pipeline is a DAG: changing a requirement invalidates estimates, design, and costs that depend on it. `tools/check.mjs` compares against the last baseline and deterministically lists what got left behind; a Stop hook (`.claude/settings.json`) blocks the end of the turn while there's pending propagation, with a 2-minute grace period for the session the agent just touched.
