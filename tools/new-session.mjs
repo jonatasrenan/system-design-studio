@@ -4,7 +4,7 @@
 // Does in one call: creates sessions/<yyyy-mm-dd>-<slug>/ (meta.json + scorecard.json),
 // makes sure the viewer is up (starts it in background if needed), and prints to stdout:
 //   line 1: the slug
-//   then:   viewer status, learnings with status "aberto", and padrões.
+//   then:   viewer status, learnings with status "open", and patterns.
 // The agent uses this output directly — no separate health curl or Reads.
 //
 // Parallel execution (several agents, one per session):

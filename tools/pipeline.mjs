@@ -24,7 +24,7 @@ export const ORDER = [
 
 // Stages retired from the canonical pipeline. A file on disk with one of these names
 // (an old clone, a stray manual write) is hidden from both the local panel and the
-// shared page by this single constant, and flagged by check.mjs --lint ([etapa-aposentada])
+// shared page by this single constant, and flagged by check.mjs --lint ([retired-stage])
 // instead of silently rendering as a raw filename tab. 60-avaliacao.md is here because
 // the studio stopped scoring sessions on a fixed 1-4 scale — see the product-scope issue.
 export const RETIRED_STAGES = ['60-avaliacao.md'];
@@ -170,7 +170,7 @@ export function stageStatus(dir) {
   return { baseline: base !== null, stages };
 }
 
-// User memory (learnings/padrões) is personal and stays out of version control:
+// User memory (learnings/patterns) is personal and stays out of version control:
 // the repository versions only the `.template.md` files. Create on first need.
 export function ensureMemoryFiles(root) {
   for (const name of ['learnings.md', 'patterns.md']) {

@@ -205,7 +205,7 @@ function parseStateDiagram(src) {
   return edges;
 }
 
-// --- number parsing shared by [capacity] and [numeros]: a stale number after a
+// --- number parsing shared by [capacity] and [numbers]: a stale number after a
 // premise change is the defect the mesa catches in seconds and the lint didn't
 // used to. Brazilian formatting (2.000,50) and plain (2000.5) both parse; k/mil/M
 // are magnitude multipliers, so "2.000 ≈ 2 mil ≈ 2000 ≈ 2k" compare equal. -----
@@ -230,7 +230,7 @@ function extractMagnitudeNumbers(text) {
   }
   return out;
 }
-// Numbers that carry a UNIT as a whole token — this is what [numeros] flags, and
+// Numbers that carry a UNIT as a whole token — this is what [numbers] flags, and
 // requiring the unit is what keeps "10 sessões" from being read as "10 s" and a
 // bare HTTP code / year / #N (no unit at all) from ever matching.
 function extractNumUnitTokens(text) {
