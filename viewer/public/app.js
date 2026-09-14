@@ -25,8 +25,23 @@ mermaidInit('dagre-wrapper');
 // O ELK compacta em camadas e cresce para baixo — é o que mantém o desenho legível
 // quando a largura acaba. Se ele falhar (ou devolver um SVG sem nós, do qual os
 // tooltips dependem), cai para o motor padrão sem que o usuário perceba.
-async function renderFlowchart(id, src) {
+// Direction of the main diagram is a rendering choice too: a left-to-right source
+// with five grouped layers becomes a 25%-zoom strip; top-down keeps every label
+// readable at fit-to-width. The reader can flip it; the .mmd stays as written.
+const DIAGRAM_DIR_KEY = 'sd-diagram-direction';
+const diagramDirection = () => {
+  try {
+    return localStorage.getItem(DIAGRAM_DIR_KEY) || 'TB';
+  } catch {
+    return 'TB';
+  }
+};
+const withDirection = (src, dir) =>
+  dir ? src.replace(/^(\s*)(flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/, `$1$2 ${dir}`) : src;
+
+async function renderFlowchart(id, src, { direction } = {}) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
+  if (isFlowchart && direction) src = withDirection(src, direction);
   if (isFlowchart) {
     try {
       mermaidInit('elk');
@@ -257,14 +272,22 @@ async function renderTab() {
           ${row('Alternatives', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
+      const dir = diagramDirection();
       content.innerHTML = `<div class="diagram-zoom">
+          <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
           <button data-z="out" title="Zoom out">−</button>
           <button data-z="fit" title="Fit to width">fit</button>
           <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
         </div><div class="diagram-wrap"></div>${legend}`;
+      content.querySelector('[data-dir]').onclick = () => {
+        try {
+          localStorage.setItem(DIAGRAM_DIR_KEY, dir === 'TB' ? 'LR' : 'TB');
+        } catch {}
+        renderTab();
+      };
       try {
-        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram);
+        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram, { direction: dir });
         const wrap = content.querySelector('.diagram-wrap');
         wrap.innerHTML = svg;
         setupDiagramZoom(content, wrap);
