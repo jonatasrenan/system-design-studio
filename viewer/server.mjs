@@ -1,11 +1,11 @@
-// Viewer do harness de system design.
-// Zero dependências: serve o frontend, expõe as sessões como JSON e
-// notifica mudanças de arquivo via SSE para as abas atualizarem sozinhas.
+// System design harness viewer.
+// Zero dependencies: serves the frontend, exposes sessions as JSON, and
+// notifies file changes via SSE so the tabs update on their own.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stageStatus, ensureMemoryFiles, loadEnv } from '../tools/pipeline.mjs';
+import { stageStatus, ensureMemoryFiles, loadEnv, RETIRED_STAGES } from '../tools/pipeline.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -48,8 +48,8 @@ function listSessions() {
     .map((d) => {
       const dir = path.join(SESSIONS_DIR, d.name);
       let mtime = 0;
-      // sessão apagada/renomeada no meio da varredura (ou ilegível) não pode derrubar
-      // o servidor: este caminho roda também no timer de republicação, sem request.
+      // a session deleted/renamed mid-scan (or unreadable) must not take down
+      // the server: this path also runs on the republish timer, without a request.
       let files = [];
       try {
         files = fs.readdirSync(dir);
@@ -74,7 +74,7 @@ function readSession(slug) {
   try {
     const files = fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.md'))
+      .filter((f) => f.endsWith('.md') && !RETIRED_STAGES.includes(f))
       .sort()
       .map((name) => ({ name, content: fs.readFileSync(path.join(dir, name), 'utf8') }));
     const diagramPath = path.join(dir, 'diagram.mmd');
@@ -83,13 +83,14 @@ function readSession(slug) {
     try {
       scorecard = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'));
     } catch {}
-    // arquivo de CONTEÚDO modificado por último — o modo "seguir" do frontend abre a aba dele.
-    // scorecard.json fica de fora: é artefato lateral atualizado junto com o conteúdo —
-    // segui-lo faria o painel pular para a Visão Geral a cada apply.
+    // the CONTENT file modified last — the frontend's "follow" mode opens its tab.
+    // scorecard.json is excluded: it's a side artifact updated alongside the content —
+    // following it would make the panel jump to the Overview on every apply. A retired
+    // stage's file (an old clone, a stray manual write) never becomes "last changed" either.
     let lastChanged = null;
     let lastMtime = 0;
     for (const f of fs.readdirSync(dir)) {
-      if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.')) continue;
+      if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.') || RETIRED_STAGES.includes(f)) continue;
       try {
         const m = fs.statSync(path.join(dir, f)).mtimeMs;
         if (m > lastMtime) {
@@ -100,12 +101,12 @@ function readSession(slug) {
     }
     return { slug, meta: readMeta(dir), files, diagram, scorecard, pipeline: stageStatus(dir), lastChanged };
   } catch {
-    // sessão removida/renomeada no meio da leitura
+    // session removed/renamed mid-read
     return null;
   }
 }
 
-const ROOT_DOCS = ['learnings.md', 'rubric.md', 'guardrails.md', 'argumentario.md'];
+const ROOT_DOCS = ['learnings.md', 'patterns.md', 'guardrails.md'];
 function readRootDoc(name) {
   const p = path.join(ROOT, name);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
@@ -123,15 +124,15 @@ function broadcastChange() {
   }, 150);
 }
 
-// --- auto-republish de sessões compartilhadas (tools/share.mjs) ---
-// Sessão com meta.share.auto !== false é re-publicada pelo próprio servidor
-// quando muda — o agente nunca faz deploy.
+// --- auto-republishing of shared sessions (tools/share.mjs) ---
+// A session with meta.share.auto !== false is re-published by the server
+// itself when it changes — the agent never deploys.
 import { spawn } from 'node:child_process';
 const publishState = new Map(); // slug -> { publishedAt, running, timer }
 function sessionMtime(dir) {
   let m = 0;
   for (const f of fs.readdirSync(dir)) {
-    // .state.json (baseline) CONTA: muda as cores do pipeline na página publicada
+    // .state.json (baseline) COUNTS: it changes the pipeline colors on the published page
     if (f.startsWith('.') && f !== '.state.json') continue;
     try {
       m = Math.max(m, fs.statSync(path.join(dir, f)).mtimeMs);
@@ -160,11 +161,11 @@ function scheduleRepublish() {
         st.running = false;
         if (code === 0) {
           st.publishedAt = at;
-          console.log(`↻ share republicado: ${s.slug}`);
-        } else console.log(`⚠ share falhou (${code}): ${s.slug} — ${errBuf.trim().split('\n').pop() ?? 'sem stderr'}`);
-        scheduleRepublish(); // pega mudanças ocorridas durante o publish
+          console.log(`↻ share republished: ${s.slug}`);
+        } else console.log(`⚠ share failed (${code}): ${s.slug} — ${errBuf.trim().split('\n').pop() ?? 'no stderr'}`);
+        scheduleRepublish(); // pick up changes that happened during the publish
       });
-    }, 5000); // debounce: espera a rajada de writes do agente assentar
+    }, 5000); // debounce: wait for the agent's burst of writes to settle
   }
 }
 
@@ -183,26 +184,25 @@ const server = http.createServer((req, res) => {
     return json(res, 200, {
       sessions: listSessions(),
       learnings: readRootDoc('learnings.md'),
-      rubric: readRootDoc('rubric.md'),
+      patterns: readRootDoc('patterns.md'),
       guardrails: readRootDoc('guardrails.md'),
-      argumentario: readRootDoc('argumentario.md'),
     });
   if (req.method !== 'POST' && url.pathname.startsWith('/api/session/')) {
     const slug = decodeURIComponent(url.pathname.slice('/api/session/'.length));
     const session = readSession(slug);
-    return session ? json(res, 200, session) : json(res, 404, { error: 'não encontrada' });
+    return session ? json(res, 200, session) : json(res, 404, { error: 'not found' });
   }
-  // compartilhar / descompartilhar pelo painel — o servidor chama tools/share.mjs
+  // share / unshare from the panel — the server calls tools/share.mjs
   if (req.method === 'POST' && /^\/api\/session\/[^/]+\/(share|unshare)$/.test(url.pathname)) {
     const [, , , rawSlug, action] = url.pathname.split('/');
     const slug = decodeURIComponent(rawSlug);
     const dir = path.join(SESSIONS_DIR, slug);
-    if (!path.resolve(dir).startsWith(SESSIONS_DIR + path.sep) || !fs.existsSync(dir)) return json(res, 404, { error: 'não encontrada' });
+    if (!path.resolve(dir).startsWith(SESSIONS_DIR + path.sep) || !fs.existsSync(dir)) return json(res, 404, { error: 'not found' });
     const shareArgs = [path.join(ROOT, 'tools', 'share.mjs'), slug, '--quiet'];
     if (action === 'unshare') shareArgs.push('--delete');
     const child = spawn('node', shareArgs, { stdio: 'ignore' });
     child.on('exit', (code) => {
-      if (code !== 0) return json(res, 500, { error: `share.mjs saiu com ${code} — aws cli configurado?` });
+      if (code !== 0) return json(res, 500, { error: `share.mjs exited with ${code} — is the aws cli configured?` });
       const meta = readMeta(dir);
       json(res, 200, { share: meta.share ?? null });
       if (action === 'share') {
@@ -225,15 +225,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // estáticos
+  // static files
   let file = url.pathname === '/' ? '/index.html' : url.pathname;
   const filePath = path.join(PUBLIC_DIR, path.normalize(file));
   if (!filePath.startsWith(PUBLIC_DIR) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     res.writeHead(404);
     return res.end('404');
   }
-  // no-cache: o navegador revalida a cada load — mudança em app.js/style.css
-  // vale no próximo refresh, sem hard-refresh nem versão desencontrada da faixa
+  // no-cache: the browser revalidates on every load — a change to app.js/style.css
+  // takes effect on the next refresh, no hard-refresh or mismatched strip version
   res.writeHead(200, {
     'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
     'Cache-Control': 'no-cache',
@@ -243,14 +243,14 @@ const server = http.createServer((req, res) => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.log(`porta ${PORT} já em uso — o viewer provavelmente já está rodando em http://localhost:${PORT}`);
+    console.log(`port ${PORT} already in use — the viewer is probably already running at http://localhost:${PORT}`);
     process.exit(0);
   }
   throw err;
 });
 
-// Loopback por padrão: o painel local não deve ficar visível na rede
-// (o compartilhamento com terceiros é papel do share.mjs). HOST= sobrescreve.
+// Loopback by default: the local panel shouldn't be visible on the network
+// (sharing with third parties is share.mjs's job). HOST= overrides it.
 server.listen(PORT, process.env.HOST || '127.0.0.1', () => {
-  console.log(`viewer em http://localhost:${PORT}`);
+  console.log(`viewer at http://localhost:${PORT}`);
 });

@@ -1,21 +1,24 @@
-// Escrita SEGURA nos arquivos globais de memória (learnings.md / argumentario.md).
-// Esses dois arquivos são o único estado compartilhado entre sessões que o fluxo
-// escreve (grade passo 5b/7, review passo 6). Com vários agentes em paralelo, a
-// edição por texto (Read → Edit) vira read-modify-write concorrente e perde itens.
-// Aqui a escrita acontece sob lock (mkdir atômico + retry), relendo o arquivo
-// dentro da seção crítica, com dedupe por título.
+// SAFE writing to the global memory files (learnings.md / patterns.md). These are
+// the only shared state between sessions that the flow writes to. With several
+// agents in parallel, editing by text (Read → Edit) becomes a concurrent
+// read-modify-write and loses items. Here the write happens under a lock (atomic
+// mkdir + retry), re-reading the file inside the critical section, with dedupe by
+// title, and format validation: an item missing a required field is refused, with
+// the expected format in the message, never written half-formed.
 //
-// Uso:
-//   node tools/learnings.mjs append [--target learnings|argumentario] [--session <slug>]
-//       ← stdin: um ou mais itens markdown começando com "## <título>" (formato do arquivo)
-//         itens cujo "## <título>" já existe são ignorados (avisa) — para reforçar um item
-//         existente use `note`; para promover use `promote`
-//   node tools/learnings.mjs promote "<título exato>" --session <slug>
-//       muda **Status** para dominado e anota a sessão que comprovou na **Origem**
-//   node tools/learnings.mjs note "<título exato>" "<texto>" [--target ...]
-//       acrescenta " · <texto>" ao fim da linha **Origem** (ex.: "recorreu em sessions/<slug>")
-//   [--file <caminho>] sobrescreve o alvo (testes); [--quiet] só imprime erros.
-// Sempre idempotente por título; nunca reescreve itens existentes além do campo pedido.
+// Usage:
+//   node tools/learnings.mjs append [--target learnings|patterns] [--session <slug>]
+//       ← stdin: one or more markdown items starting with "## <title>" (the target's
+//         format — see FORMAT_HELP below). An item missing a required field is
+//         refused (nothing written); items whose "## <title>" already exists
+//         are skipped (with a warning) — to reinforce an existing item use `note`; to
+//         promote it use `promote`.
+//   node tools/learnings.mjs promote "<exact title>" --session <slug>
+//       changes **Status** to mastered and notes the session that proved it in **Origin**
+//   node tools/learnings.mjs note "<exact title>" "<text>" [--target ...]
+//       appends " · <text>" to the end of the **Origin**/**Seen in** line
+//   [--file <path>] overrides the target (tests); [--quiet] only prints errors.
+// Always idempotent by title; never rewrites existing items beyond the field requested.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,18 +37,52 @@ const [cmd, a1, a2] = positional;
 const quiet = args.includes('--quiet');
 const target = opt('--target') ?? 'learnings';
 const session = opt('--session');
-const FILES = { learnings: 'learnings.md', argumentario: 'argumentario.md' };
+const FILES = { learnings: 'learnings.md', patterns: 'patterns.md' };
 if (!cmd || !['append', 'promote', 'note'].includes(cmd) || !FILES[target]) {
-  console.error('uso: node tools/learnings.mjs append|promote|note ... [--target learnings|argumentario] [--session <slug>]');
+  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|patterns] [--session <slug>]');
   process.exit(1);
+}
+
+// Required fields per target, and the format shown to whoever gets refused.
+// Each field lists its accepted spellings: English first (what the tool writes
+// and documents) and the pre-migration Portuguese one, so an item written before
+// the migration keeps validating instead of being refused as malformed.
+const REQUIRED_FIELDS = {
+  learnings: [['Status'], ['Origin', 'Origem'], ['Learning', 'Aprendizado'], ['How to apply', 'Como aplicar']],
+  patterns: [['Choice', 'Escolha'], ['When it changes', 'Quando muda'], ['30s defense', 'Defesa em 30s'], ['Seen in', 'Visto em']],
+};
+const FORMAT_HELP = {
+  learnings: `## <short theme>
+- **Status**: open | mastered
+- **Origin**: sessions/<slug> (date)
+- **Learning**: what became clear, in 1-3 sentences
+- **How to apply**: practical trigger for next time`,
+  patterns: `## <decision pattern>
+- **Choice**: what was chosen
+- **When it changes**: what would flip the decision
+- **30s defense**: the ready articulation, with the nuance that makes the difference
+- **Seen in**: sessions/<slug> (date)`,
+};
+// Missing fields for a block, or null if it's valid (or the target isn't validated).
+function missingFields(block, tgt) {
+  const required = REQUIRED_FIELDS[tgt];
+  if (!required) return null;
+  const fieldRe = (names) => new RegExp(`^-\\s*\\*\\*(?:${names.map((f) => f.replace(/\s/g, '\\s+')).join('|')})\\*\\*:\\s*\\S`, 'm');
+  const missing = required.filter((names) => !fieldRe(names).test(block)).map((names) => names[0]);
+  if (missing.length) return missing;
+  if (tgt === 'learnings') {
+    const m = block.match(/^-\s*\*\*Status\*\*:\s*(.+)$/m);
+    if (m && !/^(open|mastered|aberto|dominado)\s*$/.test(m[1].trim())) return ['Status (must be exactly "open" or "mastered")'];
+  }
+  return null;
 }
 ensureMemoryFiles(ROOT);
 const file = opt('--file') ? path.resolve(opt('--file')) : path.join(ROOT, FILES[target]);
 const log = (...m) => !quiet && console.log(...m);
 const today = new Date().toISOString().slice(0, 10);
-const origem = session ? `sessions/${session} (${today})` : `(${today})`;
+const origin = session ? `sessions/${session} (${today})` : `(${today})`;
 
-// --- lock: mkdir é atômico no filesystem; lock órfão (> 60 s) é removido ---
+// --- lock: mkdir is atomic on the filesystem; an orphaned lock (> 60s) is removed ---
 const lockDir = `${file}.lock`;
 async function withLock(fn) {
   const deadline = Date.now() + 15_000;
@@ -62,14 +99,14 @@ async function withLock(fn) {
         }
       } catch {}
       if (Date.now() > deadline) {
-        console.error(`lock ocupado há muito tempo: ${lockDir} — outro agente travou? remova manualmente se for órfão`);
+        console.error(`lock held for too long: ${lockDir} — is another agent stuck? remove it manually if it's an orphan`);
         process.exit(1);
       }
       await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
     }
   }
-  // libera também quando fn() sai por process.exit() (validação falhou): sem isso o
-  // lock órfão fazia a próxima escrita esperar 15 s e falhar.
+  // also releases when fn() exits via process.exit() (validation failed): without this
+  // the orphaned lock would make the next write wait 15s and fail.
   let released = false;
   const release = () => {
     if (released) return;
@@ -84,7 +121,7 @@ async function withLock(fn) {
   }
 }
 
-// --- parsing: itens = blocos "## título" fora de fences ``` ---
+// --- parsing: items = "## title" blocks outside of ``` fences ---
 function splitItems(md) {
   const lines = md.split('\n');
   const items = []; // {title, start, end}
@@ -103,7 +140,7 @@ function splitItems(md) {
 }
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 
-// escrita atômica: tmp + rename (leitor nunca vê arquivo pela metade)
+// atomic write: tmp + rename (a reader never sees the file halfway written)
 function writeAtomic(p, content) {
   const tmp = `${p}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, content);
@@ -126,45 +163,54 @@ await withLock(() => {
   if (cmd === 'append') {
     const input = stdin().trim();
     if (!input) {
-      console.error('append: stdin vazio — envie um ou mais itens "## título" no formato do arquivo');
+      console.error('append: empty stdin — send one or more "## title" items in the file\'s format');
       process.exit(1);
     }
     const { items: newItems, lines: newLines } = splitItems(input);
     if (!newItems.length) {
-      console.error('append: nenhum "## título" encontrado no stdin');
+      console.error('append: no "## title" found in stdin');
       process.exit(1);
     }
     const blocks = [];
-    const vistos = new Set(); // duplicata DENTRO do mesmo payload também é duplicata
+    const seen = new Set(); // a duplicate WITHIN the same payload is also a duplicate
     for (const it of newItems) {
-      if (vistos.has(norm(it.title))) {
-        log(`repetido no mesmo envio (ignorado): ${it.title}`);
+      if (seen.has(norm(it.title))) {
+        log(`repeated in the same submission (skipped): ${it.title}`);
         continue;
       }
-      vistos.add(norm(it.title));
+      seen.add(norm(it.title));
       if (existing.has(norm(it.title))) {
-        log(`já existe (ignorado): ${it.title} — use note/promote para reforçar`);
+        log(`already exists (skipped): ${it.title} — use note/promote to reinforce it`);
         continue;
       }
       let block = newLines.slice(it.start, it.end).join('\n').trimEnd();
-      // origem automática quando o bloco não trouxe (learnings) — sessão informada
-      if (session && target === 'learnings' && !/\*\*Origem\*\*/.test(block))
-        block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origem**: ${origem}`);
-      if (session && target === 'argumentario' && !/\*\*Visto em\*\*/.test(block)) block += `\n- **Visto em**: ${origem}`;
+      // auto-fill Origin/Seen in from --session when the block didn't bring one —
+      // BEFORE validating, since that's what lets a caller omit it when --session is given
+      if (session && target === 'learnings' && !/\*\*(Origin|Origem)\*\*/.test(block))
+        block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origin**: ${origin}`);
+      if (session && target === 'patterns' && !/\*\*(Seen in|Visto em)\*\*/.test(block))
+        block += `\n- **Seen in**: ${origin}`;
+      const missing = missingFields(block, target);
+      if (missing) {
+        console.error(
+          `append: "${it.title}" is missing ${missing.join(', ')} — ${target} items must follow this format:\n\n${FORMAT_HELP[target]}`
+        );
+        process.exit(1); // nothing written — a batch with one malformed item writes nothing, not a partial result
+      }
       blocks.push(block);
     }
-    if (!blocks.length) return log('nada a acrescentar');
-    // remove o placeholder de arquivo vazio (argumentario nasce com ele)
-    let out = md.replace(/^_\(vazio[^\n]*\)_\s*$/m, '').replace(/\s+$/, '');
+    if (!blocks.length) return log('nothing to append');
+    // remove the empty-file placeholder (patterns.md is born with it)
+    let out = md.replace(/^_\((vazio|empty)[^\n]*\)_\s*$/m, '').replace(/\s+$/, '');
     out = `${out}\n\n${blocks.join('\n\n')}\n`;
     writeAtomic(file, out);
-    log(`${path.basename(file)}: ${blocks.length} item(ns) acrescentado(s)${session ? ` (origem ${origem})` : ''}`);
+    log(`${path.basename(file)}: ${blocks.length} item(s) appended${session ? ` (origin ${origin})` : ''}`);
     return;
   }
 
   const it = a1 && existing.get(norm(a1));
   if (!it) {
-    console.error(`item não encontrado em ${path.basename(file)}: "${a1}" (títulos: ${items.map((i) => i.title).join(' | ')})`);
+    console.error(`item not found in ${path.basename(file)}: "${a1}" (titles: ${items.map((i) => i.title).join(' | ')})`);
     process.exit(1);
   }
   const block = lines.slice(it.start, it.end);
@@ -172,28 +218,28 @@ await withLock(() => {
   if (cmd === 'promote') {
     const si = idx(/^-\s*\*\*Status\*\*:/);
     if (si < 0) {
-      console.error('item sem linha **Status**');
+      console.error('item has no **Status** line');
       process.exit(1);
     }
-    if (/dominado/.test(block[si])) log(`já dominado: ${it.title}`);
-    block[si] = block[si].replace(/:\s*.*$/, ': dominado');
-    const oi = idx(/^-\s*\*\*Origem\*\*:/);
-    const nota = `comprovado em ${origem}`;
-    if (oi >= 0 && !block[oi].includes(nota)) block[oi] = `${block[oi].trimEnd()} · ${nota}`;
-    log(`promovido: ${it.title} (${nota})`);
+    if (/mastered|dominado/.test(block[si])) log(`already mastered: ${it.title}`);
+    block[si] = block[si].replace(/:\s*.*$/, ': mastered');
+    const oi = idx(/^-\s*\*\*(Origin|Origem)\*\*:/);
+    const note = `proven in ${origin}`;
+    if (oi >= 0 && !block[oi].includes(note)) block[oi] = `${block[oi].trimEnd()} · ${note}`;
+    log(`promoted: ${it.title} (${note})`);
   } else {
     if (!a2) {
-      console.error('note: informe o texto');
+      console.error('note: provide the text');
       process.exit(1);
     }
-    const oi = idx(/^-\s*\*\*(Origem|Visto em)\*\*:/);
+    const oi = idx(/^-\s*\*\*(Origin|Seen in|Origem|Visto em)\*\*:/);
     if (oi < 0) {
-      console.error('item sem linha **Origem**/**Visto em**');
+      console.error('item has no **Origin**/**Seen in** line');
       process.exit(1);
     }
-    if (block[oi].includes(a2)) return log(`nota já presente: ${it.title}`);
+    if (block[oi].includes(a2)) return log(`note already present: ${it.title}`);
     block[oi] = `${block[oi].trimEnd()} · ${a2}`;
-    log(`anotado em "${it.title}": ${a2}`);
+    log(`noted on "${it.title}": ${a2}`);
   }
   const out = [...lines.slice(0, it.start), ...block, ...lines.slice(it.end)].join('\n');
   writeAtomic(file, out);

@@ -2,21 +2,24 @@
 .idea/
 node_modules/
 
-# memória pessoal: o repositório versiona só os *.template.md, e as ferramentas
-# criam os arquivos reais no primeiro uso — assim o conteúdo de quem clona nunca
-# aparece como mudança para fazer upstream
+# personal memory: the repository versions only the *.template.md files, and
+# the tools create the real files on first use — so what you clone never shows
+# up as a change to send upstream
 learnings.md
+patterns.md
+# argumentario.md: a retired file (see the product-scope issue), kept under its
+# historical name so a pre-existing local copy stays ignored — never re-created
 argumentario.md
 
-# sessões são pessoais e não vão para o repositório
+# sessions are personal and don't go into the repository
 sessions/*
 !sessions/.gitkeep
 
-# configuração pessoal (bucket, distribution, perfil AWS) — o repositório versiona
-# só o .env.example
+# personal configuration (bucket, distribution, AWS profile) — the repository
+# versions only .env.example
 .env
 
-# estado local de máquina
+# local machine state
 .claude/settings.local.json
 eval-report-*.md
 *.lock

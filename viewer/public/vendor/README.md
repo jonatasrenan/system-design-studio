@@ -1,6 +1,6 @@
-# Bibliotecas vendorizadas
+# Vendored libraries
 
-Cópias minificadas, versionadas aqui para o painel funcionar offline e sem `npm install`.
+Minified copies, versioned here so the panel works offline and without `npm install`.
 
 - **marked** v12.0.2 — MIT — https://github.com/markedjs/marked
-- **mermaid** (bundle UMD minificado) — MIT — https://github.com/mermaid-js/mermaid
+- **mermaid** (minified UMD bundle) — MIT — https://github.com/mermaid-js/mermaid

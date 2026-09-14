@@ -1,39 +1,63 @@
-// Modelo compartilhado do pipeline de uma sessão (usado pelo checker e pelo viewer).
+// Shared model of a session's pipeline (used by the checker and the viewer).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { TEMPLATE_BY_FILE } from './templates.mjs';
 
-// ordem do pipeline: mudança em i invalida j > i não-tocado.
-// É também a ordem das abas no viewer.
+// pipeline order: a change at i invalidates any untouched j > i.
+// This is also the tab order in the viewer.
 export const ORDER = [
-  '00-problema.md',
-  '10-requisitos.md',
-  '20-estimativas.md',
+  '00-problem.md',
+  '10-requirements.md',
+  '20-estimates.md',
+  '25-domain.md',
   '30-design.md',
+  '35-data-model.md',
   '40-tradeoffs.md',
-  '50-operacao.md',
+  '50-operations.md',
   'diagram.mmd',
   'scorecard.json',
-  '90-duvidas.md',
+  '90-faq.md',
   '45-review.md',
   '70-poc.md',
-  '60-avaliacao.md',
 ];
 
-// etapas opcionais: ausência nunca reprova (nem em sessão concluída)
-export const OPTIONAL = ['70-poc.md', '90-duvidas.md'];
+// Stages retired from the canonical pipeline. A file on disk with one of these names
+// (an old clone, a stray manual write) is hidden from both the local panel and the
+// shared page by this single constant, and flagged by check.mjs --lint ([retired-stage])
+// instead of silently rendering as a raw filename tab. 60-avaliacao.md is here because
+// the studio stopped scoring sessions on a fixed 1-4 scale — see the product-scope issue.
+export const RETIRED_STAGES = ['60-avaliacao.md'];
+
+// optional stages: absence never fails the check (not even in a completed session).
+// 25-domain.md and 35-data-model.md sit in causal DAG position (aggregate
+// boundary decides transaction boundary, transaction boundary decides row grain)
+// but are only proposed by default when the dominant risk of the session is
+// data-shaped — see the design skill.
+export const OPTIONAL = ['25-domain.md', '35-data-model.md', '70-poc.md', '90-faq.md'];
 
 export const hashFile = (p) =>
   crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 16);
 
-// Jargão interno que não pode vazar para artefatos compartilháveis (ver CLAUDE.md).
-// "baseline" sozinho é termo técnico legítimo — só forma de comando e nomes internos contam.
-export const JARGON =
-  /\/(design|review|grade|interview|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard)\.mjs|scorecard\.json|learnings\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento/i;
+// Strips HTML comments from markdown text before it's parsed as artifact content —
+// a comment (e.g. a stage template's lint-contract header) is documentation for
+// whoever edits the file, not part of the design doc. Keeps line numbers stable:
+// characters inside a comment are blanked out, not removed, so a line that was
+// entirely a comment becomes an empty line rather than vanishing.
+export function stripHtmlComments(text) {
+  return text.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '));
+}
 
-// Parser leve do diagram.mmd (flowchart): nós com rótulo/forma/subgraph e arestas.
-// Cobre as formas usadas no repositório: id["x"] id[(x)] id[[x]] id((x)) id{x} id(x) id[x].
+// Internal jargon that must not leak into shareable artifacts (see CLAUDE.md).
+// "baseline" alone is a legitimate technical term — only command forms and internal names count.
+// Bilingual on purpose: sessions are written in English by default, but the
+// existing ones are in Portuguese — the conversational/process voice has to be
+// caught in both languages, never only in the one the studio happens to default to.
+export const JARGON =
+  /\/(design|review|mesa|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard|migrate)\.mjs|scorecard\.json|learnings\.md|patterns\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento|\b(first|second|next) pass\b|\bpass (1|2|light|preliminary|reference)\b|correct me if|in this review|preliminary review|left for (the )?polish/i;
+
+// Lightweight parser for diagram.mmd (flowchart): nodes with label/shape/subgraph, and edges.
+// Covers the shapes used in this repo: id["x"] id[(x)] id[[x]] id((x)) id{x} id(x) id[x].
 export function parseDiagram(src) {
   const nodes = new Map(); // id -> {id, label, shape, subgraph, lines}
   const edges = [];
@@ -74,12 +98,12 @@ export function parseDiagram(src) {
   return { nodes: [...nodes.values()], edges, subgraphs };
 }
 
-// Status de cada etapa em relação à última baseline (.state.json):
-//   ok            — existe e não divergiu; nenhum upstream divergiu
-//   editado       — divergiu da baseline (trabalho em andamento)
-//   desatualizado — não foi tocada, mas algum upstream divergiu
-//   pendente      — ainda não existe
-// Sem baseline, só existe ok/pendente (consistência ainda não rastreada).
+// Status of each stage relative to the last baseline (.state.json):
+//   ok            — exists and hasn't diverged; no upstream has diverged either
+//   editado       — diverged from the baseline (work in progress)
+//   desatualizado — untouched, but some upstream diverged
+//   pendente      — doesn't exist yet
+// Without a baseline, only ok/pendente exist (consistency isn't tracked yet).
 export function stageStatus(dir) {
   let base = null;
   try {
@@ -87,23 +111,23 @@ export function stageStatus(dir) {
   } catch {}
   const stages = [];
   let upstreamChanged = false;
-  // estado de CONTEÚDO do review: FALHAs abertas nos guardrails deixam a etapa vermelha
-  let falhasAbertas = 0;
+  // CONTENT state of the review: open FAILs in the guardrails turn the stage red
+  let openFails = 0;
   try {
-    falhasAbertas = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'))?.guardrails?.falha ?? 0;
+    openFails = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'))?.guardrails?.fail ?? 0;
   } catch {}
   for (const name of ORDER) {
     const p = path.join(dir, name);
     const exists = fs.existsSync(p);
-    // stub: o arquivo ainda é o template intocado (aba laranja no viewer)
+    // stub: the file is still the untouched template (orange tab in the viewer)
     let stub = false;
     if (exists && TEMPLATE_BY_FILE[name]) {
       try {
         stub = fs.readFileSync(p, 'utf8') === TEMPLATE_BY_FILE[name];
       } catch {}
     }
-    // scorecard: nasce com esqueleto no new-session — semanticamente vazio conta
-    // como "pendente" (aba desligada), não como etapa existente
+    // scorecard: born with a skeleton from new-session — semantically empty counts
+    // as "pendente" (tab off), not as an existing stage
     let scEmpty = false;
     if (exists && name === 'scorecard.json') {
       try {
@@ -111,7 +135,7 @@ export function stageStatus(dir) {
         const empty = (a) => !Array.isArray(a) || a.length === 0;
         scEmpty =
           empty(sc.slos) && empty(sc.capacity) && empty(sc.components) &&
-          empty(sc.costs?.items) && !sc.guardrails && !sc.rubric && empty(sc.risks);
+          empty(sc.costs?.items) && !sc.guardrails && empty(sc.risks);
       } catch {}
     }
     let status;
@@ -136,8 +160,8 @@ export function stageStatus(dir) {
       status = 'pendente';
       stub = false;
     }
-    // review só "fecha" (verde) com todos os itens PASS/N-A; staleness (desatualizado) tem prioridade
-    if (name === '45-review.md' && exists && falhasAbertas > 0 && status !== 'desatualizado') {
+    // review only "closes" (green) once every item is PASS/N-A; staleness (desatualizado) takes priority
+    if (name === '45-review.md' && exists && openFails > 0 && status !== 'desatualizado') {
       status = 'falhas';
       stub = false;
     }
@@ -146,10 +170,10 @@ export function stageStatus(dir) {
   return { baseline: base !== null, stages };
 }
 
-// Memória do usuário (learnings/argumentário) é pessoal e fica fora do versionamento:
-// o repositório versiona só os `.template.md`. Criar na primeira necessidade.
+// User memory (learnings/patterns) is personal and stays out of version control:
+// the repository versions only the `.template.md` files. Create on first need.
 export function ensureMemoryFiles(root) {
-  for (const name of ['learnings.md', 'argumentario.md']) {
+  for (const name of ['learnings.md', 'patterns.md']) {
     const file = path.join(root, name);
     if (fs.existsSync(file)) continue;
     const tpl = path.join(root, name.replace(/\.md$/, '.template.md'));
@@ -157,8 +181,8 @@ export function ensureMemoryFiles(root) {
   }
 }
 
-// `.env` na raiz: configuração pessoal (bucket, distribution, perfil AWS) fora do
-// versionamento. O ambiente de verdade sempre vence o arquivo.
+// Root `.env`: personal configuration (bucket, distribution, AWS profile) outside
+// version control. The real environment always wins over the file.
 export function loadEnv(root) {
   const file = path.join(root, '.env');
   if (!fs.existsSync(file)) return;
@@ -175,17 +199,17 @@ export function loadEnv(root) {
   }
 }
 
-// --- escrita segura, compartilhada pelas ferramentas ---------------------------
-// tmp + rename: um leitor concorrente nunca vê o arquivo pela metade.
+// --- safe writes, shared across the tools -------------------------------------
+// tmp + rename: a concurrent reader never sees the file halfway written.
 export function writeAtomic(file, content) {
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, content);
   fs.renameSync(tmp, file);
 }
 
-// Lock por diretório (mkdir é atômico no filesystem). Devolve a função que libera;
-// também libera se o processo sair por process.exit() no meio da operação — sem
-// isso um caminho de erro deixaria a próxima escrita esperando 60 s pelo órfão.
+// Per-directory lock (mkdir is atomic on the filesystem). Returns the release function;
+// also releases if the process exits via process.exit() mid-operation — without
+// that, an error path would leave the next write waiting 60s for the orphan.
 export function lockFile(file, { timeoutMs = 15_000, staleMs = 60_000 } = {}) {
   const lockDir = `${file}.lock`;
   const deadline = Date.now() + timeoutMs;
@@ -203,7 +227,7 @@ export function lockFile(file, { timeoutMs = 15_000, staleMs = 60_000 } = {}) {
         }
       } catch {}
       if (Date.now() > deadline) {
-        console.error(`lock ocupado há muito tempo: ${lockDir} — outro processo travou? remova se for órfão`);
+        console.error(`lock held for too long: ${lockDir} — is another process stuck? remove it if it's an orphan`);
         process.exit(1);
       }
       sleep(50 + Math.floor(Math.random() * 150));

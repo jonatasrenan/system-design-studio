@@ -1,9 +1,9 @@
-// Linha do tempo de uma conversa (transcript JSONL do Claude Code): tool calls,
-// durações e gaps de geração — para avaliar onde o tempo de uma sessão foi gasto.
-// Uso:
-//   node tools/timing.mjs <caminho/do/transcript.jsonl>
-//   node tools/timing.mjs --latest   # transcript mais recente deste projeto
-//   [--gap <s>]                      # só mostra gaps maiores que isso (default 5)
+// Timeline of a conversation (Claude Code JSONL transcript): tool calls,
+// durations, and generation gaps — to evaluate where a session's time went.
+// Usage:
+//   node tools/timing.mjs <path/to/transcript.jsonl>
+//   node tools/timing.mjs --latest   # most recent transcript for this project
+//   [--gap <s>]                      # only show gaps larger than this (default 5)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,7 +17,7 @@ let file = args.find((a) => !a.startsWith('--') && a !== String(gapMin));
 if (args.includes('--latest') || !file) {
   const projDir = path.join(os.homedir(), '.claude', 'projects', ROOT.replaceAll('/', '-'));
   if (!fs.existsSync(projDir)) {
-    console.error(`sem transcripts em ${projDir}`);
+    console.error(`no transcripts in ${projDir}`);
     process.exit(1);
   }
   const cands = fs
@@ -26,7 +26,7 @@ if (args.includes('--latest') || !file) {
     .map((f) => path.join(projDir, f))
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   if (!cands.length) {
-    console.error('nenhum transcript encontrado');
+    console.error('no transcript found');
     process.exit(1);
   }
   file = cands[0];
@@ -55,7 +55,7 @@ for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
   const ts = o.timestamp ? Date.parse(o.timestamp) : null;
   if (!ts) continue;
   const content = o.message?.content;
-  // mensagem REAL do usuário = fronteira de turno (separa "esperando usuário" de "geração")
+  // a REAL user message = turn boundary (separates "waiting on the user" from "generation")
   if (o.type === 'user' && !o.isMeta) {
     const isText =
       typeof content === 'string' ||
@@ -77,7 +77,7 @@ for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
 }
 events.sort((a, b) => a.ts - b.ts);
 if (!events.length) {
-  console.error('nenhum tool call no transcript');
+  console.error('no tool call in the transcript');
   process.exit(1);
 }
 
@@ -86,16 +86,16 @@ const dur = (ms) => (ms >= 60000 ? `${Math.floor(ms / 60000)}m${String(Math.roun
 
 let prevEnd = null;
 let toolMs = 0;
-let waitMs = 0; // intervalo que termina numa mensagem do usuário = esperando o usuário
-let genMs = 0; // demais intervalos = geração
-const started = new Map(); // id -> call ts (para casar resultado)
+let waitMs = 0; // an interval ending in a user message = waiting on the user
+let genMs = 0; // every other interval = generation
+const started = new Map(); // id -> call ts (to match the result)
 console.log(`transcript: ${file}\n`);
 for (const e of events) {
   const interval = prevEnd !== null ? e.ts - prevEnd : 0;
   if (e.kind === 'user') {
     if (interval > 0) waitMs += interval;
-    if (interval >= gapMin * 1000) console.log(`${fmt(prevEnd)}  ~esperando usuário~ ${dur(interval)}`);
-    console.log(`${fmt(e.ts)}  — mensagem do usuário —`);
+    if (interval >= gapMin * 1000) console.log(`${fmt(prevEnd)}  ~waiting on user~ ${dur(interval)}`);
+    console.log(`${fmt(e.ts)}  — user message —`);
     prevEnd = Math.max(prevEnd ?? e.ts, e.ts);
     continue;
   }
@@ -103,7 +103,7 @@ for (const e of events) {
   if (!call) continue;
   if (e.kind === 'call') {
     if (interval > 0) genMs += interval;
-    if (interval >= gapMin * 1000) console.log(`${fmt(prevEnd)}  ~geração~           ${dur(interval)}`);
+    if (interval >= gapMin * 1000) console.log(`${fmt(prevEnd)}  ~generating~        ${dur(interval)}`);
     started.set(e.id, e.ts);
     prevEnd = Math.max(prevEnd ?? e.ts, e.ts);
   } else {
@@ -118,5 +118,5 @@ for (const e of events) {
 }
 const span = events[events.length - 1].ts - events[0].ts;
 console.log(
-  `\ntotal: ${dur(span)} · ferramentas: ${dur(toolMs)} (${((toolMs / span) * 100).toFixed(0)}%) · geração: ${dur(genMs)} (${((genMs / span) * 100).toFixed(0)}%) · esperando usuário: ${dur(waitMs)} (${((waitMs / span) * 100).toFixed(0)}%)`
+  `\ntotal: ${dur(span)} · tools: ${dur(toolMs)} (${((toolMs / span) * 100).toFixed(0)}%) · generation: ${dur(genMs)} (${((genMs / span) * 100).toFixed(0)}%) · waiting on user: ${dur(waitMs)} (${((waitMs / span) * 100).toFixed(0)}%)`
 );

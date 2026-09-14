@@ -1,68 +1,67 @@
 # System Design Studio
 
-Harness para estudar system design de entrevistas com o [Claude Code](https://claude.com/claude-code). A conversa acontece no terminal; um painel web mostra em tempo real os artefatos do design — requisitos, estimativas, decisões, diagrama — atualizados a cada troca. Cada design vira um diretório de arquivos que dá para reler, comparar e compartilhar como design doc.
+A harness for taking a system design from a rough idea to a consistent, reviewable state with [Claude Code](https://claude.com/claude-code). The conversation happens in the terminal; a web panel shows the design's artifacts in real time — requirements, estimates, decisions, diagram — updated on every exchange. Each design becomes a directory of files you can reread, compare, and hand to someone else as a design doc: requirements, estimates, a diagram, trade-offs with the numbers behind them, and an adversarial review against a fixed 34-item checklist.
 
-## Requisitos
+## Requirements
 
-Node.js 20 ou superior. Nenhuma dependência npm — o viewer é um servidor HTTP nativo e as libs de front (Mermaid, marked) estão vendorizadas em `viewer/public/vendor/`. Só o compartilhamento de design (opcional, no fim deste arquivo) exige mais: a AWS CLI autenticada.
+Node.js 20 or newer. No npm dependencies — the viewer is a native HTTP server and the front-end libs (Mermaid, marked) are vendored in `viewer/public/vendor/`. Only design sharing (optional, at the end of this file) needs more: an authenticated AWS CLI.
 
-## Uso
-
-```bash
-node viewer/server.mjs        # painel em http://localhost:4400 (PORT muda a porta)
-claude                        # em outro terminal, na raiz do repo
-```
-
-Os comandos abaixo são skills em `.claude/skills/`: ficam disponíveis por rodar o `claude` a partir da raiz deste repositório (e confiar no diretório quando ele perguntar), junto com as instruções de `CLAUDE.md` e o hook de consistência de `.claude/settings.json`.
-
-| Comando | O que faz |
-|---|---|
-| `/design <problema>` | Novo estudo em modo estúdio: requisitos → estimativas → design → trade-offs → operação |
-| `/design` | Lista os designs existentes para continuar um |
-| `/interview` | Simulado solo: o Claude é entrevistador e escriba ao mesmo tempo |
-| `/interviewer` | Simulado a três: este Claude é só o entrevistador; outro Claude, em outra sessão, apoia o candidato |
-| `/review` | Revisão adversarial contra as classes de falha de `guardrails.md` |
-| `/grade` | Avaliação contra a rubrica de `rubric.md` + plano de estudo |
-| `/harness-eval` | Avalia o harness (não o candidato): eval determinística + juiz semântico |
-
-Também dá para conversar em linguagem natural ("vamos desenhar um encurtador de URLs") — `CLAUDE.md` mapeia a intenção para o fluxo certo.
-
-## Como está organizado
-
-| Caminho | Papel |
-|---|---|
-| `sessions/<slug>/` | Um diretório por design: `.md` numerados (viram abas), `diagram.mmd` (Mermaid, fonte única do desenho), `scorecard.json` (painel executivo), `meta.json` |
-| `rubric.md` | Critérios da entrevista, notas 1-4 |
-| `guardrails.md` | Checklist de classes de falha (SPOF, idempotência, backpressure, hot keys, DR…); nenhum design conclui com falha aberta |
-| `learnings.template.md` | Semente da memória de erros recorrentes (de `aberto` a `dominado`), que realimenta as próximas sessões |
-| `argumentario.template.md` | Semente do repertório de decisões com a defesa curta pronta — revisão pré-entrevista |
-| `tools/` | IO mecânico determinístico: criação de sessão e etapas, patch do scorecard, checagem de consistência |
-| `viewer/` | Servidor Node com file watcher + SSE e o front do painel |
-| `.env.example` | Semente da configuração pessoal (bucket, distribution, perfil AWS, porta) |
-| `CLAUDE.md` | As instruções que dirigem o agente: fases, protocolo de propagação, regras de escrita |
-
-**O que é seu não vira commit.** As suas sessões (`sessions/*`), a sua memória (`learnings.md` e `argumentario.md`, criados dos `.template.md` no primeiro uso) e a sua configuração (`.env`) estão no `.gitignore`. Assim dá para estudar em cima de um clone, ou de um fork, sem que o conteúdo dos seus designs apareça como mudança para mandar de volta. Para versionar os seus, use outro repositório — ou remova essas linhas do `.gitignore`, sabendo o que está publicando.
-
-## Duas peças que merecem explicação
-
-**Propagação de premissa.** O pipeline é um DAG: mudar um requisito invalida estimativas, design e custos que dependem dele. `tools/check.mjs` compara com a última baseline e lista deterministicamente o que ficou para trás; um Stop hook (`.claude/settings.json`) bloqueia o fim do turno enquanto houver propagação pendente, com uma carência de 2 minutos para a sessão que o agente acabou de tocar.
-
-**Compartilhar um design.** `tools/share.mjs` publica uma sessão como página estática (o mesmo painel, com os dados embutidos) num bucket S3 atrás de um CDN — útil para o entrevistador acompanhar ao vivo. É opcional, chama a **AWS CLI** (`aws s3 cp`, `aws cloudfront create-invalidation`) e precisa de configuração:
+## Usage
 
 ```bash
-cp .env.example .env                     # e preencha:
-#   SD_SHARE_BUCKET=meu-bucket            (obrigatório)
-#   SD_SHARE_BASE=https://exemplo.com     (obrigatório: URL pública na frente do bucket)
-#   SD_SHARE_DIST=E1234567890ABC          (opcional: distribution CloudFront a invalidar)
-#   AWS_PROFILE=...                       (opcional: herda o ambiente)
-
-node tools/share.mjs <slug>              # publica; --dry-run só gera o HTML, sem tocar na AWS
-node tools/share.mjs <slug> --off        # pausa a republicação automática
-node tools/share.mjs <slug> --delete     # tira do ar (compartilhar de novo devolve a mesma URL)
+node viewer/server.mjs        # panel at http://localhost:4400 (PORT changes the port)
+claude                        # in another terminal, at the repo root
 ```
 
-O `.env` fica fora do versionamento (o repositório traz só o `.env.example`), e variável exportada no shell vence o arquivo. Sem as duas obrigatórias o comando falha dizendo o que falta, sem chamar a AWS; o resto do harness funciona offline.
+New to the studio? **[WORKFLOW.md](WORKFLOW.md)** is the end-to-end usage guide: a diagram of the whole flow, a step-by-step of what to say and what to expect, and a table of "signs you're off the rails and what to do".
 
-## Licença
+The commands below are skills in `.claude/skills/`: they become available by running `claude` from this repository's root (and trusting the directory when it asks), together with the instructions in `CLAUDE.md` and the consistency hook in `.claude/settings.json`.
 
-MIT — veja [LICENSE](LICENSE).
+| Command | What it does |
+|---|---|
+| `/design <problem>` | New design: requirements → estimates → design → trade-offs → operations |
+| `/design` | Lists existing designs to continue one |
+| `/review` | Adversarial review against the failure classes in `guardrails.md` |
+| `/mesa` | Live skeptical rehearsal of a design's defense — no files touched, no score, just pressure |
+| `/harness-eval` | Evaluates the harness (not the design): deterministic eval + semantic judge |
+
+You can also just talk in natural language ("let's design a URL shortener") — `CLAUDE.md` maps the intent to the right flow.
+
+## How it's organized
+
+| Path | Role |
+|---|---|
+| `sessions/<slug>/` | One directory per design: numbered `.md` files (become tabs), `diagram.mmd` (Mermaid, single source for the design), `scorecard.json` (executive panel), `meta.json` |
+| `guardrails.md` | 34-item checklist across three blocks (failure classes, data & contract, domain & modeling); five verdicts (PASS/FAIL/N-A/premise-to-validate/accepted-risk); no design concludes with an open failure |
+| `learnings.template.md` | Seed for the memory of recurring mistakes (from `open` to `mastered`), which feeds back into the next sessions |
+| `patterns.template.md` | Seed for decisions already resolved across designs, each with the short defense ready |
+| `tools/` | Deterministic mechanical IO: session and stage creation, scorecard patching, consistency checking |
+| `viewer/` | Node server with a file watcher + SSE, and the panel's front end |
+| `.env.example` | Seed for personal configuration (bucket, distribution, AWS profile, port) |
+| `CLAUDE.md` | The instructions that drive the agent: phases, propagation protocol, writing rules |
+
+**What's yours never becomes a commit.** Your sessions (`sessions/*`), your memory (`learnings.md` and `patterns.md`, created from the `.template.md` files on first use), and your configuration (`.env`) are in `.gitignore`. That way you can build on top of a clone, or a fork, without your design content ever showing up as a change to send back upstream. To version your own, use a different repository — or remove those lines from `.gitignore`, knowing what you're publishing.
+
+## Two pieces that deserve an explanation
+
+**Premise propagation.** The pipeline is a DAG: changing a requirement invalidates estimates, design, and costs that depend on it. `tools/check.mjs` compares against the last baseline and deterministically lists what got left behind; a Stop hook (`.claude/settings.json`) blocks the end of the turn while there's pending propagation, with a 2-minute grace period for the session the agent just touched.
+
+**Sharing a design.** `tools/share.mjs` publishes a session as a static page (the same panel, with the data embedded) in an S3 bucket behind a CDN — useful for a reviewer to follow along live. It's optional, calls the **AWS CLI** (`aws s3 cp`, `aws cloudfront create-invalidation`), and needs configuration:
+
+```bash
+cp .env.example .env                     # and fill in:
+#   SD_SHARE_BUCKET=my-bucket             (required)
+#   SD_SHARE_BASE=https://example.com     (required: public URL in front of the bucket)
+#   SD_SHARE_DIST=E1234567890ABC          (optional: CloudFront distribution to invalidate)
+#   AWS_PROFILE=...                       (optional: inherits the environment)
+
+node tools/share.mjs <slug>              # publishes; --dry-run just generates the HTML, without touching AWS
+node tools/share.mjs <slug> --off        # pauses auto-republishing
+node tools/share.mjs <slug> --delete     # takes it down (sharing again returns the same URL)
+```
+
+`.env` stays out of version control (the repository ships only `.env.example`), and a variable exported in the shell wins over the file. Without the two required ones, the command fails saying what's missing, without calling AWS; the rest of the harness works offline.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

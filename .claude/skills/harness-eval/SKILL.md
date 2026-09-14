@@ -1,33 +1,33 @@
 ---
 name: harness-eval
-description: Avalia se o harness produziu um processo/resultado correto para uma sessão — camada determinística (tools/eval.mjs) + julgamento semântico (LLM-as-judge), com comparação opcional contra uma sessão golden. Use após testes cegos ou mudanças no harness.
+description: Evaluates whether the harness produced a correct process/result for a session — a deterministic layer (tools/eval.mjs) + semantic judgment (LLM-as-judge), with an optional comparison against a golden session. Use after blind tests or changes to the harness.
 ---
 
-# /harness-eval — avaliação do harness (não do candidato)
+# /harness-eval — harness evaluation (not the design, and not the person)
 
-Objeto de avaliação: **o processo do harness**, não a qualidade do design em si (isso é papel do `/grade`). Rode de preferência numa sessão de Claude diferente da que produziu o design (juiz independente).
+Object of evaluation: **the harness's process**, not the quality of the design itself (that's `/review`'s job). Preferably run it in a different Claude session than the one that produced the design (independent judge).
 
-Argumentos: `<slug|caminho da sessão>` e opcionalmente `--golden <dir>` (o usuário informa o caminho do golden; não presuma).
+Arguments: `<slug|session path>` and optionally `--golden <dir>` (the user provides the golden's path; don't assume one).
 
-## Camada 1 — determinística
+## Layer 1 — deterministic
 
-Rode `node tools/eval.mjs <alvo> [--golden <dir>]` e incorpore o resultado. Qualquer ✗ é falha objetiva do harness — vá direto à causa (skill não instruiu? hook não disparou? agente ignorou convenção?).
+Run `node tools/eval.mjs <target> [--golden <dir>]` and fold the result in. Any ✗ is an objective harness failure — go straight to the root cause (did the skill not instruct it? did the hook not fire? did the agent ignore a convention?).
 
-**Custo do processo**: rode também `node tools/timing.mjs --latest` (ou com o caminho do transcript da sessão avaliada) — sai a linha do tempo de tool calls, durações e gaps de geração. Use para apontar atrito do harness (Reads desnecessários, chamadas gotejadas, round-trips de skill) separado do custo legítimo de geração de conteúdo.
+**Process cost**: also run `node tools/timing.mjs --latest` (or with the transcript path of the evaluated session) — outputs the timeline of tool calls, durations, and generation gaps. Use it to point out harness friction (unnecessary Reads, drip-fed calls, skill round-trips) separately from the legitimate cost of content generation.
 
-## Camada 2 — juiz semântico
+## Layer 2 — semantic judge
 
-O que scripts não pegam. Leia todos os artefatos da sessão (e do golden, se houver) e julgue cada dimensão com nota 1-4 + evidência:
+What scripts don't catch. Read all the session's artifacts (and the golden's, if any) and judge each dimension 1-4 + evidence:
 
-1. **Coerência entre etapas**: os números batem entre requisitos → estimativas → scorecard → design? (ex.: QPS declarado vs dimensionamento do cache; custo citado no texto vs costs do scorecard)
-2. **Fidelidade diagrama ↔ design**: todo componente citado no design está no diagrama e vice-versa? A legenda descreve o que o design diz que o componente faz?
-3. **Propagação semântica**: se houve mudança de premissa na sessão, ela chegou de verdade nos downstream (números recalculados, não só arquivos "tocados" para enganar o checker de hashes)?
-4. **Profundidade do processo**: requisitos foram levantados antes da solução? Trade-offs têm alternativas reais e perdas explícitas, ou são retóricos? O review foi adversarial ou carimbo?
-5. **Skimabilidade**: cada etapa se entende em ~1 tela? A história de uma request permite entender o sistema sem ler o resto?
-6. **(com golden)** Cobertura relativa: o que o golden tem que a candidata não tem — e é falta do *harness* (não conduziu) ou variação legítima de design?
+1. **Coherence across stages**: do the numbers match between requirements → estimates → scorecard → design? (e.g., declared QPS vs. cache sizing; cost mentioned in the text vs. costs in the scorecard)
+2. **Diagram ↔ design fidelity**: is every component mentioned in the design in the diagram and vice versa? Does the legend describe what the design says the component does?
+3. **Semantic propagation**: if there was a premise change in the session, did it actually reach the downstream files (numbers recalculated, not just files "touched" to fool the hash checker)?
+4. **Process depth**: were requirements gathered before the solution? Do trade-offs have real alternatives and explicit losses, or are they rhetorical? Was the review adversarial or a rubber stamp?
+5. **Skimmability**: does each stage read in ~1 screen? Does the request story let you understand the system without reading the rest?
+6. **(with golden)** Relative coverage: what does the golden have that the candidate doesn't — and is it a *harness* miss (didn't drive it) or a legitimate design variation?
 
-Importante: designs diferentes do golden podem ser igualmente válidos — julgue **processo e completude**, não semelhança de solução.
+Important: designs that differ from the golden can be equally valid — judge **process and completeness**, not similarity of solution.
 
-## Relatório
+## Report
 
-Escreva o veredito em um arquivo `eval-report-<yyyy-mm-dd>.md` **dentro do diretório que o usuário indicar** (num teste cego, fora do repo, junto do golden): resultado da camada 1, tabela das 6 dimensões com notas e evidências, lista de regressões/lacunas do harness com a correção sugerida (em qual skill/guardrail/ferramenta mexer), e veredito final: **harness OK / harness regrediu / inconclusivo**. Resuma o veredito na conversa.
+Write the verdict to a file `eval-report-<yyyy-mm-dd>.md` **inside the directory the user points to** (in a blind test, outside the repo, next to the golden): the layer 1 result, a table of the 6 dimensions with scores and evidence, a list of harness regressions/gaps with the suggested fix (which skill/guardrail/tool to touch), and a final verdict: **harness OK / harness regressed / inconclusive**. Summarize the verdict in the conversation.

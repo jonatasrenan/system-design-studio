@@ -7,7 +7,7 @@
             "type": "command",
             "command": "node tools/check.mjs --hook",
             "timeout": 15,
-            "statusMessage": "Verificando consistência das sessões de system design…"
+            "statusMessage": "Checking consistency of system design sessions…"
           }
         ]
       }

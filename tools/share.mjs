@@ -1,36 +1,36 @@
-// Publica um design como página estática em <SD_SHARE_BASE>/<uuid>/index.html (S3 + CloudFront, UUID por caminho).
+// Publishes a design as a static page at <SD_SHARE_BASE>/<uuid>/index.html (S3 + CloudFront, UUID per path).
 //
-// Uso:
-//   node tools/share.mjs <slug|caminho>            # gera e publica (cria uuid na 1ª vez)
-//   node tools/share.mjs <slug> --dry-run          # só gera o html, mostra o caminho
-//   node tools/share.mjs <slug> --off              # desliga o auto-republish
-//   node tools/share.mjs <slug> --quiet            # modo silencioso (usado pelo viewer)
+// Usage:
+//   node tools/share.mjs <slug|path>                # generates and publishes (creates a uuid the 1st time)
+//   node tools/share.mjs <slug> --dry-run            # only generates the html, shows the path
+//   node tools/share.mjs <slug> --off                # turns off auto-republish
+//   node tools/share.mjs <slug> --quiet              # silent mode (used by the viewer)
 //
-// O viewer (server.mjs) chama este script automaticamente quando uma sessão
-// compartilhada muda — o agente nunca faz deploy manualmente.
+// The viewer (server.mjs) calls this script automatically when a shared session
+// changes — the agent never deploys manually.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadEnv } from './pipeline.mjs';
+import { loadEnv, RETIRED_STAGES } from './pipeline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv(ROOT);
-// Destino do deploy — configuracao do ambiente, nada hardcoded:
-//   SD_SHARE_BUCKET  bucket S3 que serve as paginas          (obrigatorio)
-//   SD_SHARE_BASE    URL publica na frente do bucket         (obrigatorio)
-//   SD_SHARE_DIST    distribution CloudFront a invalidar     (opcional)
-//   AWS_PROFILE / AWS_REGION  credenciais e regiao           (opcional, herda o ambiente)
+// Deploy target — configured through the environment, nothing hardcoded:
+//   SD_SHARE_BUCKET  S3 bucket that serves the pages              (required)
+//   SD_SHARE_BASE    public URL in front of the bucket            (required)
+//   SD_SHARE_DIST    CloudFront distribution to invalidate        (optional)
+//   AWS_PROFILE / AWS_REGION  credentials and region               (optional, inherits the environment)
 const BUCKET = process.env.SD_SHARE_BUCKET;
 const DIST_ID = process.env.SD_SHARE_DIST || '';
 const BASE_URL = (process.env.SD_SHARE_BASE || '').replace(/\/+$/, '');
 const AWS_ENV = { ...process.env, AWS_DEFAULT_REGION: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' };
 const requireEnv = () => {
-  const faltando = [!BUCKET && 'SD_SHARE_BUCKET', !BASE_URL && 'SD_SHARE_BASE'].filter(Boolean);
-  if (faltando.length) {
-    console.error(`compartilhamento nao configurado: defina ${faltando.join(' e ')} (veja README)`);
+  const missingEnv = [!BUCKET && 'SD_SHARE_BUCKET', !BASE_URL && 'SD_SHARE_BASE'].filter(Boolean);
+  if (missingEnv.length) {
+    console.error(`sharing not configured: set ${missingEnv.join(' and ')} (see README)`);
     process.exit(1);
   }
 };
@@ -43,36 +43,36 @@ const off = args.includes('--off');
 const del = args.includes('--delete');
 const log = (...a) => !quiet && console.log(...a);
 if (!target) {
-  console.error('uso: node tools/share.mjs <slug|caminho> [--dry-run|--off|--delete|--quiet]');
+  console.error('usage: node tools/share.mjs <slug|path> [--dry-run|--off|--delete|--quiet]');
   process.exit(1);
 }
 const dir = target.includes('/') ? path.resolve(target) : path.join(ROOT, 'sessions', target);
 const metaPath = path.join(dir, 'meta.json');
 if (!fs.existsSync(metaPath)) {
-  console.error(`sessão não encontrada: ${dir}`);
+  console.error(`session not found: ${dir}`);
   process.exit(1);
 }
 let meta;
 try {
   meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
 } catch (e) {
-  console.error(`meta.json inválido em ${dir}: ${e.message}`);
+  console.error(`invalid meta.json in ${dir}: ${e.message}`);
   process.exit(1);
 }
 
 if (off) {
   if (meta.share) meta.share.auto = false;
   fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
-  log('auto-republish desligado');
+  log('auto-republish turned off');
   process.exit(0);
 }
 
 if (del) {
-  // remove do S3 e apaga o registro de compartilhamento. O uuid é a identidade
-  // permanente do design: compartilhar de novo devolve a MESMA URL.
+  // removes from S3 and deletes the sharing record. The uuid is the design's
+  // permanent identity: sharing again returns the SAME URL.
   const delUuid = meta.uuid ?? meta.share?.uuid;
   if (!delUuid || !meta.share) {
-    log('sessão não está compartilhada');
+    log('session is not shared');
     process.exit(0);
   }
   requireEnv();
@@ -89,37 +89,37 @@ if (del) {
       );
     }
   } catch (e) {
-    console.error(`remoção no S3 falhou: ${e.message}`);
+    console.error(`S3 removal failed: ${e.message}`);
     process.exit(1);
   }
   delete meta.share;
   fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
-  log('descompartilhado (removido do S3)');
+  log('unshared (removed from S3)');
   process.exit(0);
 }
 
-if (!dry) requireEnv(); // dry-run só gera o HTML: não precisa de bucket nem de URL pública
+if (!dry) requireEnv(); // dry-run only generates the HTML: doesn't need a bucket or a public URL
 
-// uuid é a identidade PERMANENTE do design (criado com a sessão pelo new-session.mjs;
-// gerado aqui só para sessões antigas). Compartilhar/descompartilhar liga/desliga a
-// publicação — a URL é sempre a mesma.
+// uuid is the design's PERMANENT identity (created with the session by new-session.mjs;
+// generated here only for older sessions). Sharing/unsharing toggles publishing —
+// the URL is always the same.
 if (!meta.uuid) {
-  meta.uuid = meta.share?.uuid ?? crypto.randomUUID(); // migra formato antigo se houver
+  meta.uuid = meta.share?.uuid ?? crypto.randomUUID(); // migrates the old format, if any
   if (!dry) fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
 }
-const shareUrl = `${BASE_URL || 'https://exemplo.invalid'}/${meta.uuid}/index.html`; // sem SD_SHARE_BASE só ocorre em dry-run
+const shareUrl = `${BASE_URL || 'https://exemplo.invalid'}/${meta.uuid}/index.html`; // no SD_SHARE_BASE only happens on dry-run
 if (!meta.share || meta.share.url !== shareUrl) {
   meta.share = { url: shareUrl, auto: meta.share?.auto ?? true };
   if (!dry) {
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
-    log(`compartilhamento: ${shareUrl}`);
+    log(`sharing: ${shareUrl}`);
   }
 }
 
-// --- coleta dos dados da sessão ---
+// --- collecting the session's data ---
 const files = fs
   .readdirSync(dir)
-  .filter((f) => f.endsWith('.md'))
+  .filter((f) => f.endsWith('.md') && !RETIRED_STAGES.includes(f))
   .sort()
   .map((name) => ({ name, content: fs.readFileSync(path.join(dir, name), 'utf8') }));
 const diagram = fs.existsSync(path.join(dir, 'diagram.mmd')) ? fs.readFileSync(path.join(dir, 'diagram.mmd'), 'utf8') : null;
@@ -127,14 +127,15 @@ let scorecard = null;
 try {
   scorecard = JSON.parse(fs.readFileSync(path.join(dir, 'scorecard.json'), 'utf8'));
 } catch {}
-// --- payload idêntico ao do /api/session do viewer (a página compartilhada É o painel) ---
+// --- payload identical to the viewer's /api/session (the shared page IS the panel) ---
 const { stageStatus } = await import('./pipeline.mjs');
-// mesmo critério do viewer: scorecard.json fica fora do "arquivo mudado por último",
-// senão a página pula para a Visão Geral a cada atualização do scorecard.
+// same criterion as the viewer: scorecard.json is excluded from "last changed file",
+// otherwise the page would jump to the Overview on every scorecard update — and a
+// retired stage's leftover file (old clone, stray manual write) never counts either
 let lastChanged = null;
 let lastMtime = 0;
 for (const f of fs.readdirSync(dir)) {
-  if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.')) continue;
+  if (f === 'meta.json' || f === 'scorecard.json' || f.startsWith('.') || RETIRED_STAGES.includes(f)) continue;
   try {
     const m = fs.statSync(path.join(dir, f)).mtimeMs;
     if (m > lastMtime) {
@@ -153,12 +154,8 @@ const data = {
   lastChanged,
 };
 
-// a página pública não expõe a avaliação (nota/lacunas do candidato são material interno)
-data.files = data.files.filter((f) => f.name !== '60-avaliacao.md');
-data.pipeline.stages = data.pipeline.stages.filter((s) => s.name !== '60-avaliacao.md');
-
-// --- html autocontido: MESMO app.js e style.css do viewer, em modo estático ---
-// Toda melhoria no painel entra automaticamente aqui; divergências são combinadas com o usuário.
+// --- self-contained html: the SAME app.js and style.css as the viewer, in static mode ---
+// Every improvement to the panel goes here automatically; divergences are agreed with the user.
 const pub = (f) => fs.readFileSync(path.join(ROOT, 'viewer', 'public', f), 'utf8');
 const css = pub('style.css');
 const markedJs = pub('vendor/marked.min.js');
@@ -166,11 +163,11 @@ const mermaidJs = pub('vendor/mermaid.min.js');
 const appJs = pub('app.js');
 const dataJson = JSON.stringify(data).replace(/</g, '\\u003c');
 const buildAt = new Date().toISOString();
-// hash do código da página: dados novos com mesmo código → atualização suave; código novo → reload completo
+// hash of the page's code: new data with the same code → smooth update; new code → full reload
 const appHash = crypto.createHash('sha1').update(appJs).update(css).digest('hex').slice(0, 12);
 
 const html = `<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex"/>
@@ -180,10 +177,10 @@ const html = `<!doctype html>
 <body>
 <header>
   <h1>${meta.title} - jonatasrenan</h1>
-  <select id="session-select" title="Sessão"></select>
+  <select id="session-select" title="Session"></select>
   <span id="session-badges"></span>
-  <button id="follow-btn" title="Quando ligado, a página acompanha a etapa mais recente do design"></button>
-  <span id="live-dot" title="atualiza sozinho">●</span>
+  <button id="follow-btn" title="When on, the page follows the design's most recent stage"></button>
+  <span id="live-dot" title="auto-updating">●</span>
 </header>
 <div id="pipeline"></div>
 <main id="content"></main>
@@ -206,10 +203,10 @@ const outFile = path.join(outDir, 'index.html');
 fs.writeFileSync(outFile, html);
 const dataFile = path.join(outDir, 'data.json');
 fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
-log(`html gerado: ${outFile} (${(html.length / 1024 / 1024).toFixed(1)} MB)`);
+log(`html generated: ${outFile} (${(html.length / 1024 / 1024).toFixed(1)} MB)`);
 
 if (dry) {
-  log('(dry-run — nada foi enviado)');
+  log('(dry-run — nothing was sent)');
   process.exit(0);
 }
 
@@ -233,6 +230,6 @@ try {
   }
   log(`✅ ${meta.share.url}`);
 } catch (e) {
-  console.error(`deploy falhou: ${e.message}`);
+  console.error(`deploy failed: ${e.message}`);
   process.exit(1);
 }

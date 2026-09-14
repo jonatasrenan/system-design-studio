@@ -16,6 +16,8 @@ const MERMAID_BASE = {
   // em linhas (em vez de esticar o nó) e o espaçamento entre nós fica menor.
   flowchart: { useMaxWidth: true, htmlLabels: true, wrappingWidth: 160, nodeSpacing: 28, rankSpacing: 44, padding: 8 },
   elk: { mergeEdges: true, nodePlacementStrategy: 'BRANDES_KOEPF' },
+  // ER: slightly tighter boxes so a 15-entity model fits the width at a readable size
+  er: { useMaxWidth: true, fontSize: 12, entityPadding: 12, minEntityWidth: 90, minEntityHeight: 50, layoutDirection: 'TB' },
 };
 const mermaidInit = (renderer) =>
   mermaid.initialize({ ...MERMAID_BASE, flowchart: { ...MERMAID_BASE.flowchart, defaultRenderer: renderer } });
@@ -25,8 +27,23 @@ mermaidInit('dagre-wrapper');
 // O ELK compacta em camadas e cresce para baixo — é o que mantém o desenho legível
 // quando a largura acaba. Se ele falhar (ou devolver um SVG sem nós, do qual os
 // tooltips dependem), cai para o motor padrão sem que o usuário perceba.
-async function renderFlowchart(id, src) {
+// Direction of the main diagram is a rendering choice too: a left-to-right source
+// with five grouped layers becomes a 25%-zoom strip; top-down keeps every label
+// readable at fit-to-width. The reader can flip it; the .mmd stays as written.
+const DIAGRAM_DIR_KEY = 'sd-diagram-direction';
+const diagramDirection = () => {
+  try {
+    return localStorage.getItem(DIAGRAM_DIR_KEY) || 'TB';
+  } catch {
+    return 'TB';
+  }
+};
+const withDirection = (src, dir) =>
+  dir ? src.replace(/^(\s*)(flowchart|graph)\s+(LR|RL|TB|TD|BT)\b/, `$1$2 ${dir}`) : src;
+
+async function renderFlowchart(id, src, { direction } = {}) {
   const isFlowchart = /^\s*(flowchart|graph)\b/.test(src);
+  if (isFlowchart && direction) src = withDirection(src, direction);
   if (isFlowchart) {
     try {
       mermaidInit('elk');
@@ -59,9 +76,8 @@ const $ = (s) => document.querySelector(s);
 const state = {
   sessions: [],
   learnings: '',
-  rubric: '',
+  patterns: '',
   guardrails: '',
-  argumentario: '',
   current: null,
   session: null,
   activeTab: null,
@@ -71,10 +87,9 @@ let mermaidSeq = 0;
 
 // abas fixas, independentes da sessão
 const GLOBAL_TABS = [
-  { id: '__rubric__', label: '📋 Rubrica', key: 'rubric' },
   { id: '__guardrails__', label: '🛡 Guardrails', key: 'guardrails' },
-  { id: '__learnings__', label: '🧠 Aprendizados', key: 'learnings' },
-  { id: '__argumentario__', label: '💬 Argumentário', key: 'argumentario' },
+  { id: '__learnings__', label: '🧠 Learnings', key: 'learnings' },
+  { id: '__patterns__', label: '🧩 Patterns', key: 'patterns' },
 ];
 
 // Zoom do diagrama: "ajustar" cabe na largura disponível; acima disso o diagrama
@@ -128,6 +143,9 @@ function tabTitle(file) {
   return file.name.replace(/^\d+-/, '').replace(/\.md$/, '');
 }
 
+// Diagrams inside a stage's markdown (ER on the data-model tab, zoom sub-diagrams in
+// design) get the same treatment as the main diagram: they break out of the 900px
+// text column when they need the width, fit to it, and zoom/drag like the main one.
 async function renderMermaidIn(container) {
   const blocks = container.querySelectorAll('code.language-mermaid');
   for (const code of blocks) {
@@ -136,7 +154,20 @@ async function renderMermaidIn(container) {
     holder.className = 'mermaid-block';
     try {
       const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, src);
-      holder.innerHTML = svg;
+      holder.innerHTML = `<div class="diagram-zoom">
+          <button data-z="out" title="Zoom out">−</button>
+          <button data-z="fit" title="Fit to width">fit</button>
+          <button data-z="in" title="Zoom in">+</button>
+          <span class="diagram-zoom-val">100%</span>
+        </div><div class="diagram-wrap"></div>`;
+      const wrap = holder.querySelector('.diagram-wrap');
+      wrap.innerHTML = svg;
+      code.closest('pre').replaceWith(holder);
+      // wider than the text column → full-bleed, so the fit-to-width factor stays readable
+      const natural = wrap.querySelector('svg')?.viewBox?.baseVal?.width || 0;
+      if (natural > holder.clientWidth) holder.classList.add('wide');
+      setupDiagramZoom(holder, wrap);
+      continue;
     } catch (e) {
       holder.innerHTML = `<pre>${src}</pre><p style="color:#ef4444">mermaid: ${e.message}</p>`;
     }
@@ -152,8 +183,8 @@ function fmtCost(n) {
 
 function renderOverview(sc) {
   if (!sc) {
-    return `<div class="empty"><p>Sem scorecard ainda — a Visão Geral é preenchida conforme o design avança
-      (SLOs e capacidade junto com os requisitos, custos conforme os componentes entram, classes de falha na revisão e notas na avaliação).</p></div>`;
+    return `<div class="empty"><p>No scorecard yet — the Overview fills in as the design progresses
+      (SLOs and capacity alongside the requirements, costs as components come in, failure classes during the review, and scores during grading).</p></div>`;
   }
   const parts = [];
 
@@ -170,25 +201,30 @@ function renderOverview(sc) {
   );
   if (items.length) {
     const total = items.reduce((s, i) => s + (typeof i.cost === 'number' ? i.cost : 0), 0);
-    cards.push(`<div class="card good"><div class="card-label">Custo total</div>
+    cards.push(`<div class="card good"><div class="card-label">Total cost</div>
       <div class="card-value">${numeric ? fmtCost(total) : '—'} <small>${esc(sc.costs.unit || '')}</small></div>
-      ${has10x ? `<div class="card-sub">≈ ${fmtCost(total10x)} em escala 10x</div>` : ''}</div>`);
+      ${has10x ? `<div class="card-sub">≈ ${fmtCost(total10x)} at 10x scale</div>` : ''}</div>`);
   }
   const g = sc.guardrails;
   if (g) {
-    const cls = g.falha > 0 ? 'bad' : '';
-    // público: sem vocabulário interno — "guardrails/pass/falha" vira linguagem de design
+    const cls = g.fail > 0 ? 'bad' : '';
+    const premises = g.premises ?? 0;
+    const acceptedRisks = g.accepted_risks ?? 0;
+    // extra states shown only when in use — premises/accepted risks don't count against the design,
+    // so they get the same neutral visual treatment as "n/a", never the "bad" one
+    const extra = [premises ? `${premises} to validate` : '', acceptedRisks ? `${acceptedRisks} accepted risk(s)` : '']
+      .filter(Boolean)
+      .join(' · ');
+    // public page: no internal vocabulary — "guardrails/pass/fail" becomes design language
     cards.push(
       STATIC
-        ? `<div class="card ${cls}"><div class="card-label">Classes de falha revisadas</div>
-      <div class="card-value">${g.pass ?? 0} ok · ${g.falha ?? 0} aberta(s) · ${g.na ?? 0} não se aplicam</div></div>`
+        ? `<div class="card ${cls}"><div class="card-label">Failure classes reviewed</div>
+      <div class="card-value">${g.pass ?? 0} ok · ${g.fail ?? 0} open · ${g.na ?? 0} not applicable</div>
+      ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
         : `<div class="card ${cls}"><div class="card-label">Guardrails</div>
-      <div class="card-value">${g.pass ?? 0} pass · ${g.falha ?? 0} falha · ${g.na ?? 0} n/a</div></div>`
+      <div class="card-value">${g.pass ?? 0} pass · ${g.fail ?? 0} fail · ${g.na ?? 0} n/a</div>
+      ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
     );
-  }
-  if (sc.rubric?.overall != null) {
-    cards.push(`<div class="card"><div class="card-label">Rubrica (geral)</div>
-      <div class="card-value">${esc(sc.rubric.overall)} / 4</div></div>`);
   }
   if (cards.length) parts.push(`<div class="cards">${cards.join('')}</div>`);
 
@@ -199,8 +235,8 @@ function renderOverview(sc) {
   if (items.length)
     parts.push(
       table(
-        '💰 Custos por componente',
-        ['Componente', `Custo (${esc(sc.costs.unit || '')})`, ...(has10x ? ['Em 10x'] : []), 'Premissas'],
+        '💰 Costs by component',
+        ['Component', `Cost (${esc(sc.costs.unit || '')})`, ...(has10x ? ['At 10x'] : []), 'Assumptions'],
         items.map(
           (i) =>
             `<tr><td>${esc(i.component)}</td><td class="num">${fmtCost(i.cost)}</td>` +
@@ -212,25 +248,23 @@ function renderOverview(sc) {
       )
     );
   if (sc.slos?.length)
-    parts.push(table('🎯 SLOs', ['SLO', 'Alvo'], sc.slos.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.target)}</td></tr>`)));
+    parts.push(table('🎯 SLOs', ['SLO', 'Target'], sc.slos.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.target)}</td></tr>`)));
   if (sc.capacity?.length)
-    parts.push(table('📈 Capacidade', ['Dimensão', 'Valor'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
-  if (g?.falhas?.length)
-    parts.push(`<h2>🛡 Falhas abertas${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.falhas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
-  if (sc.rubric?.scores?.length)
-    parts.push(table('📋 Rubrica', ['Critério', 'Nota'], sc.rubric.scores.map((r) => `<tr><td>${esc(r.criterio)}</td><td class="num">${esc(r.nota)} / 4</td></tr>`)));
+    parts.push(table('📈 Capacity', ['Dimension', 'Value'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
+  if (g?.failures?.length)
+    parts.push(`<h2>🛡 Open failures${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.failures.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
   if (sc.risks?.length)
-    parts.push(`<h2>⚠️ Riscos aceitos</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
+    parts.push(`<h2>⚠️ Accepted risks</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
 
-  return `<div class="md overview">${parts.join('') || '<p class="empty">scorecard vazio</p>'}</div>`;
+  return `<div class="md overview">${parts.join('') || '<p class="empty">empty scorecard</p>'}</div>`;
 }
 
 async function renderTab() {
   const content = $('#content');
   const s = state.session;
   if (!s) {
-    content.innerHTML = `<div class="empty"><p>Nenhuma sessão ainda.</p>
-      <p>No Claude Code, rode <code>/design &lt;problema&gt;</code> ou <code>/interview</code> para começar.</p></div>`;
+    content.innerHTML = `<div class="empty"><p>No session yet.</p>
+      <p>In Claude Code, run <code>/design &lt;problem&gt;</code> to get started.</p></div>`;
     return;
   }
   const scrollPos = content.scrollTop;
@@ -238,7 +272,7 @@ async function renderTab() {
     content.innerHTML = renderOverview(s.scorecard);
   } else if (state.activeTab === '__diagram__') {
     if (!s.diagram) {
-      content.innerHTML = '<div class="empty"><p>Sem diagrama ainda — ele aparece aqui assim que o design começar a tomar forma.</p></div>';
+      content.innerHTML = '<div class="empty"><p>No diagram yet — it shows up here as soon as the design starts taking shape.</p></div>';
     } else {
       const comps = s.scorecard?.components || [];
       // ficha do componente: o hover responde rápido; aqui é o material de estudo
@@ -248,22 +282,30 @@ async function renderTab() {
           ? `<a class="tr-link" data-tab="40-tradeoffs.md" data-tr="${esc(c.tradeoff)}">→ trade-off ${esc(c.tradeoff)}</a>`
           : '';
         return `<div class="comp" id="comp-${norm(c.name).replace(/ /g, '-')}"><b class="comp-name">${esc(c.name)}</b>
-          ${row('O que é', c.what)}
-          ${row('Papel', c.purpose)}
-          ${row('Se falhar', c.failure)}
-          ${row('Como escala', c.scaling)}
-          ${row('Por quê', c.why)}
-          ${row('Alternativas', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
+          ${row('What it is', c.what)}
+          ${row('Role', c.purpose)}
+          ${row('If it fails', c.failure)}
+          ${row('How it scales', c.scaling)}
+          ${row('Why', c.why)}
+          ${row('Alternatives', c.rejected?.length ? c.rejected.join(' · ') : '')}${tr}</div>`;
       };
       const legend = comps.length ? `<div class="comp-legend">${comps.map(compCard).join('')}</div>` : '';
+      const dir = diagramDirection();
       content.innerHTML = `<div class="diagram-zoom">
-          <button data-z="out" title="Diminuir">−</button>
-          <button data-z="fit" title="Caber na largura">ajustar</button>
-          <button data-z="in" title="Aumentar">+</button>
+          <button data-dir title="Layout direction: ${dir === 'TB' ? 'top-down (click for left-to-right)' : 'left-to-right (click for top-down)'}">${dir === 'TB' ? '↓ top-down' : '→ left-right'}</button>
+          <button data-z="out" title="Zoom out">−</button>
+          <button data-z="fit" title="Fit to width">fit</button>
+          <button data-z="in" title="Zoom in">+</button>
           <span class="diagram-zoom-val">100%</span>
         </div><div class="diagram-wrap"></div>${legend}`;
+      content.querySelector('[data-dir]').onclick = () => {
+        try {
+          localStorage.setItem(DIAGRAM_DIR_KEY, dir === 'TB' ? 'LR' : 'TB');
+        } catch {}
+        renderTab();
+      };
       try {
-        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram);
+        const { svg } = await renderFlowchart(`mm-${++mermaidSeq}`, s.diagram, { direction: dir });
         const wrap = content.querySelector('.diagram-wrap');
         wrap.innerHTML = svg;
         setupDiagramZoom(content, wrap);
@@ -305,7 +347,7 @@ async function renderTab() {
     }
   } else if (GLOBAL_TABS.some((t) => t.id === state.activeTab)) {
     const tab = GLOBAL_TABS.find((t) => t.id === state.activeTab);
-    content.innerHTML = `<div class="md">${marked.parse(state[tab.key] || '_vazio_')}</div>`;
+    content.innerHTML = `<div class="md">${marked.parse(state[tab.key] || '_empty_')}</div>`;
     await renderMermaidIn(content);
   } else {
     const file = s.files.find((f) => f.name === state.activeTab);
@@ -315,28 +357,29 @@ async function renderTab() {
   content.scrollTop = scrollPos;
 }
 
-// etapa do pipeline → [rótulo, aba correspondente]
+// pipeline stage → [label, matching tab]
 const STAGE_META = {
-  '00-problema.md': ['Problema', '00-problema.md'],
-  '10-requisitos.md': ['Requisitos', '10-requisitos.md'],
-  '20-estimativas.md': ['Estimativas', '20-estimativas.md'],
+  '00-problem.md': ['Problem', '00-problem.md'],
+  '10-requirements.md': ['Requirements', '10-requirements.md'],
+  '20-estimates.md': ['Estimates', '20-estimates.md'],
+  '25-domain.md': ['Domain', '25-domain.md'],
   '30-design.md': ['Design', '30-design.md'],
-  'diagram.mmd': ['Diagrama', '__diagram__'],
-  'scorecard.json': ['Visão Geral', '__overview__'],
+  '35-data-model.md': ['Data Model', '35-data-model.md'],
+  'diagram.mmd': ['Diagram', '__diagram__'],
+  'scorecard.json': ['Overview', '__overview__'],
   '40-tradeoffs.md': ['Trade-offs', '40-tradeoffs.md'],
   '45-review.md': ['Review', '45-review.md'],
-  '50-operacao.md': ['Operação', '50-operacao.md'],
-  '60-avaliacao.md': ['Avaliação', '60-avaliacao.md'],
+  '50-operations.md': ['Operations', '50-operations.md'],
   '70-poc.md': ['POC/MVP', '70-poc.md'],
-  '90-duvidas.md': ['Dúvidas', '90-duvidas.md'],
+  '90-faq.md': ['Questions', '90-faq.md'],
 };
 const STATUS_TITLE = {
-  ok: 'atualizada — consistente com a última baseline',
-  editado: 'em edição — divergiu da baseline (trabalho em andamento)',
-  desatualizado: 'DESATUALIZADA — um upstream mudou e esta etapa não foi revisitada',
-  pendente: 'pendente — ainda não existe',
-  stub: 'template criado, conteúdo ainda não escrito',
-  falhas: 'review aberto — há FALHAs aguardando emenda ou registro consciente',
+  ok: 'up to date — consistent with the last baseline',
+  editado: 'being edited — diverged from the baseline (work in progress)',
+  desatualizado: 'STALE — an upstream changed and this stage wasn\'t revisited',
+  pendente: 'pending — doesn\'t exist yet',
+  stub: 'template created, content not written yet',
+  falhas: 'review open — there are FAILs awaiting a fix or a conscious record',
 };
 
 // --- tooltip nos nós do SVG do diagrama (descrição · por quê · descartadas) ---
@@ -441,6 +484,26 @@ const FILE_TO_TAB = (name) => {
 };
 
 // navegação única: pipeline da sessão + documentos globais
+// A missing optional stage (25-domain.md, 35-data-model.md) that was a
+// conscious call, not an oversight, has a line under "## Deferred decisions" in
+// 40-tradeoffs.md naming it and saying "dismissed" ("dispensad[a/o]" in a
+// Portuguese session) — same convention the [deferred] lint uses server-side.
+// Returns that line, or null.
+const DISMISS_KEYWORDS = { '25-domain.md': /dom[íi]nio|domain/i, '35-data-model.md': /modelo|model/i };
+function dismissedReason(stageName, files) {
+  const kw = DISMISS_KEYWORDS[stageName];
+  if (!kw) return null;
+  const tradeoffs = files.find((f) => f.name === '40-tradeoffs.md');
+  if (!tradeoffs) return null;
+  const m = tradeoffs.content.match(/^##\s+(?:Deferred decisions|Decisões adiadas)\s*$([\s\S]*?)(?=^##\s|\s*$(?![\s\S]))/m);
+  if (!m) return null;
+  for (const raw of m[1].split('\n')) {
+    const line = raw.trim();
+    if (/^-\s/.test(line) && kw.test(line) && /dispensad|dismissed/i.test(line)) return line.replace(/^-\s*/, '');
+  }
+  return null;
+}
+
 function renderNav() {
   const el = $('#pipeline');
   const s = state.session;
@@ -460,9 +523,19 @@ function renderNav() {
       if (enabled) clickable.add(tabId);
       const active = tabId === state.activeTab ? ' active' : '';
       // stub (laranja) só cede para "desatualizado" — o alerta vermelho tem prioridade
-      const cls = st.status === 'desatualizado' ? 'desatualizado' : st.stub ? 'stub' : st.status;
+      let cls = st.status === 'desatualizado' ? 'desatualizado' : st.stub ? 'stub' : st.status;
+      let title = `${st.name}: ${STATUS_TITLE[cls]}`;
+      // an optional stage that never got a file BUT has a recorded dismissal reads
+      // as a conscious call, not a forgotten tab — distinct dashed style, reason on hover
+      if (st.status === 'pendente') {
+        const reason = dismissedReason(st.name, s.files);
+        if (reason) {
+          cls = 'dismissed';
+          title = `${st.name}: dismissed with reason — "${reason}"`;
+        }
+      }
       return `<button class="stage ${cls}${active}" data-tab="${enabled ? tabId : ''}"
-        title="${st.name}: ${STATUS_TITLE[cls]}" ${enabled ? '' : 'disabled'}>
+        title="${esc(title)}" ${enabled ? '' : 'disabled'}>
         <span class="dot"></span>${label}</button>`;
     });
     // arquivos avulsos fora do pipeline viram nós neutros no fim
@@ -473,10 +546,10 @@ function renderNav() {
     }
     track = nodes.join('<span class="arrow">→</span>');
     if (!p.baseline)
-      track += '<span class="pipeline-note" title="A consistência entre etapas passa a ser rastreada após a primeira baseline (node tools/check.mjs <slug> --baseline)">sem baseline</span>';
+      track += '<span class="pipeline-note" title="Consistency between stages starts being tracked after the first baseline (node tools/check.mjs <slug> --baseline)">no baseline</span>';
   }
 
-  // página compartilhada é só a sessão — documentos globais (aprendizados, argumentário...) não viajam
+  // página compartilhada é só a sessão — documentos globais (aprendizados, padrões...) não viajam
   const globals = STATIC
     ? ''
     : GLOBAL_TABS.map((t) => {
@@ -509,25 +582,23 @@ function renderHeader() {
   }
   sel.style.display = state.sessions.length && !STATIC ? '' : 'none';
   if (state.session?.meta?.title) {
-    // formato único "título - jonatasrenan"; o sufixo System Design Studio é só do viewer local
+    // single format "title - jonatasrenan"; the "System Design Studio" suffix is local-viewer only
     document.title = `${state.session.meta.title} - jonatasrenan${STATIC ? '' : ' System Design Studio'}`;
     if (STATIC) $('header h1').textContent = `${state.session.meta.title} - jonatasrenan`;
   }
   const badges = $('#session-badges');
   const meta = state.session?.meta || {};
   badges.innerHTML = '';
-  // "estudio" é o padrão — badge de modo só quando for a exceção informativa (simulado)
-  if (meta.mode === 'entrevista') badges.innerHTML += `<span class="badge">entrevista</span>`;
-  // página pública: "em-andamento" não aparece (ruído para o leitor externo); "concluido" fica
-  if (meta.status && !(STATIC && meta.status === 'em-andamento'))
-    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status}</span>`;
+  // public page: "in-progress" doesn't show (noise for an external reader); "done" stays
+  if (meta.status && !(STATIC && meta.status === 'in-progress'))
+    badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status === 'done' ? 'completed' : 'in progress'}</span>`;
   if (state.session && !STATIC) {
     if (state.shareBusy) {
-      badges.innerHTML += `<span class="badge">⏳ publicando…</span>`;
+      badges.innerHTML += `<span class="badge">⏳ publishing…</span>`;
     } else if (meta.share?.url) {
-      badges.innerHTML += `<a class="badge share" href="${meta.share.url}" target="_blank" title="design publicado — atualiza sozinho a cada mudança">🔗 compartilhado</a><button class="badge share-btn" id="unshare-btn" title="remove a página publicada do ar">✕</button>`;
+      badges.innerHTML += `<a class="badge share" href="${meta.share.url}" target="_blank" title="design published — updates itself on every change">🔗 shared</a><button class="badge share-btn" id="unshare-btn" title="takes the published page down">✕</button>`;
     } else {
-      badges.innerHTML += `<button class="badge share-btn" id="share-btn" title="publica este design num link público que atualiza sozinho">🔗 compartilhar</button>`;
+      badges.innerHTML += `<button class="badge share-btn" id="share-btn" title="publishes this design to a public link that updates itself">🔗 share</button>`;
     }
   }
   const shareCall = async (action) => {
@@ -536,10 +607,10 @@ function renderHeader() {
     try {
       const r = await fetch(`/api/session/${encodeURIComponent(state.current)}/${action}`, { method: 'POST' });
       const d = await r.json();
-      if (!r.ok) alert(d.error || 'falha ao publicar');
+      if (!r.ok) alert(d.error || 'failed to publish');
       else if (state.session) state.session.meta.share = d.share ?? undefined;
     } catch (e) {
-      alert(`falha: ${e.message}`);
+      alert(`failed: ${e.message}`);
     }
     state.shareBusy = false;
     renderHeader();
@@ -549,12 +620,12 @@ function renderHeader() {
   const ub = $('#unshare-btn');
   if (ub)
     ub.onclick = () => {
-      if (confirm('Descompartilhar? A página pública sai do ar.')) shareCall('unshare');
+      if (confirm('Unshare? The public page goes offline.')) shareCall('unshare');
     };
   const fb = $('#follow-btn');
-  // página pública: sem controle de "seguir" — é ferramenta de acompanhamento do estúdio
+  // public page: no "follow" control — that's a studio tracking tool
   if (STATIC) fb.style.display = 'none';
-  fb.textContent = state.follow ? '🔄 seguindo' : '📌 fixo';
+  fb.textContent = state.follow ? '🔄 following' : '📌 pinned';
   fb.className = state.follow ? 'on' : '';
   fb.onclick = () => {
     state.follow = !state.follow;
@@ -570,17 +641,15 @@ async function load(keepSession = true) {
     ? {
         sessions: [{ slug: window.__DATA__.slug, title: window.__DATA__.meta?.title ?? 'design' }],
         learnings: '',
-        rubric: '',
+        patterns: '',
         guardrails: '',
-        argumentario: '',
       }
     : await (await fetch('/api/sessions')).json();
   if (seq !== loadSeq) return; // resposta atrasada de um load antigo — descarta
   state.sessions = data.sessions;
   state.learnings = data.learnings;
-  state.rubric = data.rubric;
+  state.patterns = data.patterns;
   state.guardrails = data.guardrails;
-  state.argumentario = data.argumentario;
   const fromHash = decodeURIComponent(location.hash.slice(1));
   if (state.follow) {
     // seguir a conversa: sessão modificada mais recentemente
@@ -602,7 +671,7 @@ async function load(keepSession = true) {
     if (STATIC && !state.loadedOnce) {
       // pública: a PRIMEIRA carga sempre abre no Problema — leitura começa do início.
       // O acompanhamento ao vivo (pular para a etapa ativa) vale só para atualizações seguintes.
-      if (state.session.files.some((f) => f.name === '00-problema.md')) state.activeTab = '00-problema.md';
+      if (state.session.files.some((f) => f.name === '00-problem.md')) state.activeTab = '00-problem.md';
     } else {
       // ...e a etapa que a conversa acabou de tocar
       const tab = FILE_TO_TAB(state.session.lastChanged);
