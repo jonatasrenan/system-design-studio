@@ -194,6 +194,7 @@ function extractSection(text, heading) {
 
 // Content of the first ```mermaid fence in a block of text.
 const extractMermaid = (text) => /```mermaid\n([\s\S]*?)```/.exec(text ?? '')?.[1] ?? null;
+const extractMermaidAll = (text) => [...(text ?? '').matchAll(/```mermaid\n([\s\S]*?)```/g)].map((m) => m[1]);
 
 // stateDiagram-v2 edges: "A --> B" (labels ignored); [*] is the pseudostate, not a real state.
 function parseStateDiagram(src) {
@@ -552,8 +553,12 @@ function lintSession(slug) {
       notChecked('domain-lifecycle', 'no 25-domain.md in this session');
     } else {
       const section = extractSection(domain, VOCAB.lifecycle);
-      const mermaidSrc = section && extractMermaid(section);
-      if (!mermaidSrc || !/stateDiagram-v2/.test(mermaidSrc)) {
+      // a design with several lifecycles (one entity per block) is one machine per block:
+      // read every stateDiagram-v2 block in the section, not just the first fence
+      const mermaidSrc = section
+        ? extractMermaidAll(section).filter((b) => /stateDiagram-v2/.test(b)).join('\n') || null
+        : null;
+      if (!mermaidSrc) {
         notChecked('domain-lifecycle', 'no "## Lifecycle" section with a stateDiagram-v2 block in 25-domain.md');
       } else {
         const edges = parseStateDiagram(mermaidSrc);
@@ -605,8 +610,10 @@ function lintSession(slug) {
       notChecked('domain-vocabulary', 'no 25-domain.md in this session');
     } else {
       const ctxSection = extractSection(domain, VOCAB.contexts);
+      // markdown emphasis/code around the name ("- **Collection** — …") is formatting, not identity
+      const stripMd = (s) => s.replace(/[*_`]/g, '').trim();
       const declaredContexts = ctxSection
-        ? [...ctxSection.matchAll(/^-\s*(.+)$/gm)].map((m) => m[1].split(/[—:-]/)[0].trim()).filter(Boolean)
+        ? [...ctxSection.matchAll(/^-\s*(.+)$/gm)].map((m) => stripMd(m[1].split(/[—:-]/)[0])).filter(Boolean)
         : [];
       const vocabTable = findTable(domain, VOCAB.termHeader);
       if (!declaredContexts.length || !vocabTable) {
@@ -614,7 +621,7 @@ function lintSession(slug) {
       } else {
         const ownersWithTerms = new Set();
         for (const row of vocabTable.rows) {
-          const owner = row[1] ?? '';
+          const owner = stripMd(row[1] ?? '');
           ownersWithTerms.add(normVoc(owner));
           if (!declaredContexts.some((c) => normVoc(c) === normVoc(owner)))
             fail('domain-vocabulary', `25-domain.md — vocabulary owner "${owner}" is not a declared context`);

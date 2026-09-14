@@ -117,8 +117,14 @@ const { baseline, stages } = stageStatus(dir);
 if (!baseline) add(done ? 'fail' : 'warn', 'no baseline (.state.json) — consistency isn\'t tracked');
 else {
   const dirty = stages.filter((s) => s.status === 'editado' || s.status === 'desatualizado');
+  const label = { editado: 'edited since the baseline', desatualizado: 'stale (upstream changed)' };
   if (dirty.length === 0) add('ok', 'baseline consistent (no dirty stage)');
-  else add('fail', 'inconsistent baseline', dirty.map((s) => `${s.name}:${s.status}`).join(', '));
+  else
+    add(
+      'fail',
+      'baseline not re-recorded',
+      dirty.map((s) => `${s.name}: ${label[s.status] ?? s.status}`).join(', ') + ' — revisit what check.mjs lists, then run check.mjs <slug> --baseline'
+    );
 }
 
 // --- internal jargon in artifacts (pages are shareable — commands/mechanics can't leak) ---
