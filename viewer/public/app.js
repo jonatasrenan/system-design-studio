@@ -60,9 +60,7 @@ const state = {
   sessions: [],
   learnings: '',
   padroes: '',
-  rubric: '',
   guardrails: '',
-  argumentario: '',
   current: null,
   session: null,
   activeTab: null,
@@ -72,11 +70,9 @@ let mermaidSeq = 0;
 
 // abas fixas, independentes da sessão
 const GLOBAL_TABS = [
-  { id: '__rubric__', label: '📋 Rubric', key: 'rubric' },
   { id: '__guardrails__', label: '🛡 Guardrails', key: 'guardrails' },
   { id: '__learnings__', label: '🧠 Learnings', key: 'learnings' },
   { id: '__padroes__', label: '🧩 Patterns', key: 'padroes' },
-  { id: '__argumentario__', label: '💬 Playbook', key: 'argumentario' },
 ];
 
 // Zoom do diagrama: "ajustar" cabe na largura disponível; acima disso o diagrama
@@ -197,10 +193,6 @@ function renderOverview(sc) {
       ${extra ? `<div class="card-sub">${esc(extra)}</div>` : ''}</div>`
     );
   }
-  if (sc.rubric?.overall != null) {
-    cards.push(`<div class="card"><div class="card-label">Rubric (overall)</div>
-      <div class="card-value">${esc(sc.rubric.overall)} / 4</div></div>`);
-  }
   if (cards.length) parts.push(`<div class="cards">${cards.join('')}</div>`);
 
   const table = (title, head, rows) =>
@@ -228,8 +220,6 @@ function renderOverview(sc) {
     parts.push(table('📈 Capacity', ['Dimension', 'Value'], sc.capacity.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.value)}</td></tr>`)));
   if (g?.falhas?.length)
     parts.push(`<h2>🛡 Open failures${STATIC ? '' : ' (guardrails)'}</h2><ul>${g.falhas.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>`);
-  if (sc.rubric?.scores?.length)
-    parts.push(table('📋 Rubric', ['Criterion', 'Score'], sc.rubric.scores.map((r) => `<tr><td>${esc(r.criterio)}</td><td class="num">${esc(r.nota)} / 4</td></tr>`)));
   if (sc.risks?.length)
     parts.push(`<h2>⚠️ Accepted risks</h2><ul>${sc.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`);
 
@@ -241,7 +231,7 @@ async function renderTab() {
   const s = state.session;
   if (!s) {
     content.innerHTML = `<div class="empty"><p>No session yet.</p>
-      <p>In Claude Code, run <code>/design &lt;problem&gt;</code> or <code>/interview</code> to get started.</p></div>`;
+      <p>In Claude Code, run <code>/design &lt;problem&gt;</code> to get started.</p></div>`;
     return;
   }
   const scrollPos = content.scrollTop;
@@ -339,7 +329,6 @@ const STAGE_META = {
   '40-tradeoffs.md': ['Trade-offs', '40-tradeoffs.md'],
   '45-review.md': ['Review', '45-review.md'],
   '50-operacao.md': ['Operations', '50-operacao.md'],
-  '60-avaliacao.md': ['Evaluation', '60-avaliacao.md'],
   '70-poc.md': ['POC/MVP', '70-poc.md'],
   '90-duvidas.md': ['Questions', '90-duvidas.md'],
 };
@@ -518,7 +507,7 @@ function renderNav() {
       track += '<span class="pipeline-note" title="Consistency between stages starts being tracked after the first baseline (node tools/check.mjs <slug> --baseline)">no baseline</span>';
   }
 
-  // página compartilhada é só a sessão — documentos globais (aprendizados, argumentário...) não viajam
+  // página compartilhada é só a sessão — documentos globais (aprendizados, padrões...) não viajam
   const globals = STATIC
     ? ''
     : GLOBAL_TABS.map((t) => {
@@ -558,8 +547,6 @@ function renderHeader() {
   const badges = $('#session-badges');
   const meta = state.session?.meta || {};
   badges.innerHTML = '';
-  // "estudio" is the default — a mode badge only for the informative exception (mock interview)
-  if (meta.mode === 'entrevista') badges.innerHTML += `<span class="badge">interview</span>`;
   // public page: "em-andamento" doesn't show (noise for an external reader); "concluido" stays
   if (meta.status && !(STATIC && meta.status === 'em-andamento'))
     badges.innerHTML += `<span class="badge status-${meta.status}">${meta.status === 'concluido' ? 'completed' : 'in progress'}</span>`;
@@ -613,18 +600,14 @@ async function load(keepSession = true) {
         sessions: [{ slug: window.__DATA__.slug, title: window.__DATA__.meta?.title ?? 'design' }],
         learnings: '',
         padroes: '',
-        rubric: '',
         guardrails: '',
-        argumentario: '',
       }
     : await (await fetch('/api/sessions')).json();
   if (seq !== loadSeq) return; // resposta atrasada de um load antigo — descarta
   state.sessions = data.sessions;
   state.learnings = data.learnings;
   state.padroes = data.padroes;
-  state.rubric = data.rubric;
   state.guardrails = data.guardrails;
-  state.argumentario = data.argumentario;
   const fromHash = decodeURIComponent(location.hash.slice(1));
   if (state.follow) {
     // seguir a conversa: sessão modificada mais recentemente

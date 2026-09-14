@@ -154,10 +154,6 @@ const data = {
   lastChanged,
 };
 
-// the public page doesn't expose the evaluation (the candidate's score/gaps are internal material)
-data.files = data.files.filter((f) => f.name !== '60-avaliacao.md');
-data.pipeline.stages = data.pipeline.stages.filter((s) => s.name !== '60-avaliacao.md');
-
 // --- self-contained html: the SAME app.js and style.css as the viewer, in static mode ---
 // Every improvement to the panel goes here automatically; divergences are agreed with the user.
 const pub = (f) => fs.readFileSync(path.join(ROOT, 'viewer', 'public', f), 'utf8');

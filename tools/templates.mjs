@@ -146,17 +146,17 @@ _(todo termo aqui casa com um termo da tabela de vocabulário do Domínio — me
     '40-tradeoffs.md',
     `# Trade-offs
 
-<!-- formato de cada entrada:
-## N. Título da decisão
+<!-- format of each entry:
+## N. Decision title
 - **Opções**: a · b · c
 - **Escolha**: x
 - **Ganha**:
 - **Perde**:
-- **Defesa em 30s**: como articular a escolha na entrevista, com a nuance que diferencia.
+- **Defesa em 30s**: how to articulate the choice out loud, with the nuance that makes the difference.
 
-Seções fixas no fim do arquivo:
-## Decisões adiadas  — 1 linha cada: o que seria feito + por que pode esperar.
-## Referências de mercado (opcional) — 1 linha por decisão: como sistemas reais resolvem, com fonte.
+Fixed sections at the end of the file:
+## Decisões adiadas  — 1 line each: what would be done + why it can wait.
+## Referências de mercado (optional) — 1 line per decision: how real systems solve it, with a source.
 -->
 `,
   ],
@@ -181,7 +181,7 @@ _(quantos engenheiros, por função, para rodar NA escala pedida — e o regime 
     '90-duvidas.md',
     `# Dúvidas antecipadas
 
-_(FAQ do design: perguntas que um leitor/entrevistador faria, respostas de 2-4 linhas. Resposta que já vive num trade-off aponta para ele em 1 linha.)_
+_(FAQ do design: perguntas que um leitor ou revisor faria, respostas de 2-4 linhas. Resposta que já vive num trade-off aponta para ele em 1 linha.)_
 `,
   ],
   poc: [

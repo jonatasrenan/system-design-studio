@@ -1,17 +1,16 @@
-// SAFE writing to the global memory files (learnings.md / padroes.md / the legacy
-// argumentario.md). These are the only shared state between sessions that the flow
-// writes to. With several agents in parallel, editing by text (Read → Edit) becomes
-// a concurrent read-modify-write and loses items. Here the write happens under a
-// lock (atomic mkdir + retry), re-reading the file inside the critical section,
-// with dedupe by title, and — for learnings/padroes — format validation: an item
-// missing a required field is refused, with the expected format in the message,
-// never written half-formed.
+// SAFE writing to the global memory files (learnings.md / padroes.md). These are
+// the only shared state between sessions that the flow writes to. With several
+// agents in parallel, editing by text (Read → Edit) becomes a concurrent
+// read-modify-write and loses items. Here the write happens under a lock (atomic
+// mkdir + retry), re-reading the file inside the critical section, with dedupe by
+// title, and format validation: an item missing a required field is refused, with
+// the expected format in the message, never written half-formed.
 //
 // Usage:
-//   node tools/learnings.mjs append [--target learnings|padroes|argumentario] [--session <slug>]
+//   node tools/learnings.mjs append [--target learnings|padroes] [--session <slug>]
 //       ← stdin: one or more markdown items starting with "## <title>" (the target's
-//         format — see FORMAT_HELP below). learnings/padroes items missing a required
-//         field are refused (nothing written); items whose "## <title>" already exists
+//         format — see FORMAT_HELP below). An item missing a required field is
+//         refused (nothing written); items whose "## <title>" already exists
 //         are skipped (with a warning) — to reinforce an existing item use `note`; to
 //         promote it use `promote`.
 //   node tools/learnings.mjs promote "<exact title>" --session <slug>
@@ -38,15 +37,13 @@ const [cmd, a1, a2] = positional;
 const quiet = args.includes('--quiet');
 const target = opt('--target') ?? 'learnings';
 const session = opt('--session');
-const FILES = { learnings: 'learnings.md', padroes: 'padroes.md', argumentario: 'argumentario.md' };
+const FILES = { learnings: 'learnings.md', padroes: 'padroes.md' };
 if (!cmd || !['append', 'promote', 'note'].includes(cmd) || !FILES[target]) {
-  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|padroes|argumentario] [--session <slug>]');
+  console.error('usage: node tools/learnings.mjs append|promote|note ... [--target learnings|padroes] [--session <slug>]');
   process.exit(1);
 }
 
-// Required fields per target, and the format shown to whoever gets refused. Only
-// learnings/padroes are validated — argumentario is the legacy format on its way
-// out (see the harness's product-scope issue) and was never validated either.
+// Required fields per target, and the format shown to whoever gets refused.
 const REQUIRED_FIELDS = {
   learnings: ['Status', 'Origem', 'Aprendizado', 'Como aplicar'],
   padroes: ['Escolha', 'Quando muda', 'Defesa em 30s', 'Visto em'],
@@ -187,7 +184,7 @@ await withLock(() => {
       // BEFORE validating, since that's what lets a caller omit it when --session is given
       if (session && target === 'learnings' && !/\*\*Origem\*\*/.test(block))
         block = block.replace(/(\*\*Status\*\*:.*)$/m, `$1\n- **Origem**: ${origem}`);
-      if (session && (target === 'padroes' || target === 'argumentario') && !/\*\*Visto em\*\*/.test(block))
+      if (session && target === 'padroes' && !/\*\*Visto em\*\*/.test(block))
         block += `\n- **Visto em**: ${origem}`;
       const missing = missingFields(block, target);
       if (missing) {
@@ -199,7 +196,7 @@ await withLock(() => {
       blocks.push(block);
     }
     if (!blocks.length) return log('nothing to append');
-    // remove the empty-file placeholder (argumentario is born with it)
+    // remove the empty-file placeholder (padroes.md is born with it)
     let out = md.replace(/^_\(vazio[^\n]*\)_\s*$/m, '').replace(/\s+$/, '');
     out = `${out}\n\n${blocks.join('\n\n')}\n`;
     writeAtomic(file, out);

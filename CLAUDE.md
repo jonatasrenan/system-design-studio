@@ -1,6 +1,6 @@
-# System Design Studio — study harness
+# System Design Studio — a harness for taking a design to a consistent, reviewable state
 
-Repository for practicing interview system design. Each study is a **session** in `sessions/<slug>/`. The web viewer (`node viewer/server.mjs`, http://localhost:4400) renders the sessions as tabs and refreshes itself via SSE when files change.
+Repository for building out system designs to production rigor, one session at a time. Each design is a **session** in `sessions/<slug>/`: requirements, estimates, a diagram, trade-offs, an adversarial review against a fixed checklist — files you can reread, diff, and hand to someone else. The web viewer (`node viewer/server.mjs`, http://localhost:4400) renders the sessions as tabs and refreshes itself via SSE when files change.
 
 ## You are the pilot
 
@@ -10,15 +10,15 @@ The user talks in natural language — they **don't** know about or need to call
 |---|---|
 | "let's work on a system design for X" / "new design" | the `design` skill flow (new session) |
 | "let's continue the design for X" / "where did we leave off?" | the `design` skill flow (continue session) |
-| "I want to practice / simulate an interview" (solo) | the `interview` skill flow — the pilot is both interviewer AND scribe |
-| "be the interviewer" (three-way simulation: interviewer here, pilot in another session) | the `interviewer` skill flow — pure interviewer, zero files |
-| "review this design" / "what's fragile?" | the `review` skill flow |
-| "how did I do?" / "grade it" | the `grade` skill flow |
+| "review this design" / "what's fragile?" / "evaluate this" | the `review` skill flow — it's the design that gets evaluated, not the person |
+| "be the mesa" / "I want to rehearse the defense" | the `mesa` skill flow — a live skeptical reviewer, no files touched, no score |
 | "change premise X to Z" / any requirement change | the **propagation protocol** below |
+
+"How did I do?" has no mapping to a skill: whoever asks that is at the end of a `mesa` rehearsal, and the answer is the closing `mesa` already gives — in chat, never written to a file. A design doesn't get a 1-4 score here; it gets a verdict per guardrails item, which is a sharper and more actionable thing.
 
 ## Propagation protocol (premise change)
 
-A session's pipeline is a DAG (also the tab order): `00-problema → 10-requisitos → 20-estimativas → 25-dominio → 30-design → 35-modelo-de-dados → 40-tradeoffs → 50-operacao → diagram/scorecard → 90-duvidas → 45-review → 70-poc → 60-avaliacao`. `25-dominio` and `35-modelo-de-dados` are optional (proposed by default only when the dominant risk is data-shaped — see the design skill) but sit at fixed, causal DAG positions: an aggregate boundary is a transaction boundary, and the transaction boundary decides the row grain. Whenever any premise changes:
+A session's pipeline is a DAG (also the tab order): `00-problema → 10-requisitos → 20-estimativas → 25-dominio → 30-design → 35-modelo-de-dados → 40-tradeoffs → 50-operacao → diagram/scorecard → 90-duvidas → 45-review → 70-poc`. `25-dominio` and `35-modelo-de-dados` are optional (proposed by default only when the dominant risk is data-shaped — see the design skill) but sit at fixed, causal DAG positions: an aggregate boundary is a transaction boundary, and the transaction boundary decides the row grain. Whenever any premise changes:
 
 **The order is what makes this protocol useful — do not reorder it.** Running the checker before editing anything tells you nothing (nothing changed yet, so it reports "consistent"); editing every downstream file from memory and only then rewriting the baseline is exactly how a stale number survives — the checker never gets a chance to point at what you skipped.
 
@@ -36,7 +36,7 @@ A Stop hook runs `node tools/check.mjs --hook` at the end of every turn and retu
 - **The output of the work is the files, not the chat**: don't narrate or summarize in chat what you just persisted (the panel lights up the stage on its own) — a short marker and move to the next decision. User questions are the exception: always a complete answer.
 - The diagram has **a single source**: `diagram.mmd` (Mermaid). Never create diagrams in another format/place. Auxiliary diagrams (sequence, ER) can live in ```mermaid fences inside the `.md` files.
 - Write session files in Portuguese, design-doc tone: direct, with numbers and justifications.
-- **Session artifacts are self-contained and may be read by third parties** (shared link during interviews): never mention commands, skills, or internal mechanics inside the `.md` files (`/design`, `/review`, `/grade`, "harness", "checker", "baseline", file names like `scorecard.json`/`learnings.md`). References to other visible parts of the design use the tab names ("overview", "trade-offs"). Next-step recommendations in natural language ("do a mock interview"), never as a command. **No conversational or process voice**: an artifact is a design doc — never addresses the reader ("— correct me", "sound good?", "awaiting reply") nor mentions work mechanics ("pass 1/2", "light pass"); an assumed premise is recorded closed ("Out of scope (assumed): X"), and future depth as "planned deep dive", without naming the phase. **No jargon that would confuse the panel**: a niche term or anglicism ("overselling", "thundering herd"…) only when there's no simple equivalent — and with a half-line explanation on first use; standard interview vocabulary (cache, queue, replica) needs no gloss. **Class before brand**: components named by concept ("managed KV store", "managed load balancer"), a product as an example only where it anchors numbers; technology-brand names (Redis, Kafka, Postgres) are used directly; vendor/hosting brand names stay in the costs tab. The `[jargao]` lint (`check.mjs --lint`) enforces the internal-mechanics part of this rule mechanically; when the design's own subject is a term the lint would otherwise flag (e.g. a driver for agent harnesses), scope an exception in `meta.json`: `"jargao_permitido": {"harness": "assunto do design"}` — an empty reason invalidates the exception and stays a FALHA. This is a scoped rule with a written reason, never a switch to turn the check off.
+- **Session artifacts are self-contained and may be read by third parties** (shared link, a reviewer, a mesa rehearsal): never mention commands, skills, or internal mechanics inside the `.md` files (`/design`, `/review`, "harness", "checker", "baseline", file names like `scorecard.json`/`learnings.md`). References to other visible parts of the design use the tab names ("overview", "trade-offs"). Next-step recommendations in natural language ("rehearse the defense"), never as a command. **No conversational or process voice**: an artifact is a design doc — never addresses the reader ("— correct me", "sound good?", "awaiting reply") nor mentions work mechanics ("pass 1/2", "light pass"); an assumed premise is recorded closed ("Out of scope (assumed): X"), and future depth as "planned deep dive", without naming the phase. **No jargon that would confuse the panel**: a niche term or anglicism ("overselling", "thundering herd"…) only when there's no simple equivalent — and with a half-line explanation on first use; standard system-design vocabulary (cache, queue, replica) needs no gloss. **Class before brand**: components named by concept ("managed KV store", "managed load balancer"), a product as an example only where it anchors numbers; technology-brand names (Redis, Kafka, Postgres) are used directly; vendor/hosting brand names stay in the costs tab. The `[jargao]` lint (`check.mjs --lint`) enforces the internal-mechanics part of this rule mechanically; when the design's own subject is a term the lint would otherwise flag (e.g. a driver for agent harnesses), scope an exception in `meta.json`: `"jargao_permitido": {"harness": "assunto do design"}` — an empty reason invalidates the exception and stays a FALHA. This is a scoped rule with a written reason, never a switch to turn the check off.
 - **Never ask permission to keep the flow going**: phase closed → next phase in the same turn. Confirmation ("sound good?") is only for a real open decision; progress announces itself, it doesn't ask for authorization.
 - `meta.updated` is kept automatically by the tools (`stage`, `scorecard`) — edit `meta.json` by hand only to change `status`.
 
@@ -44,7 +44,7 @@ A Stop hook runs `node tools/check.mjs --hook` at the end of every turn and retu
 
 ```
 sessions/<yyyy-mm-dd>-<slug>/
-├── meta.json          # {"title", "mode": "estudio"|"entrevista", "status": "em-andamento"|"concluido", "created", "updated",
+├── meta.json          # {"title", "status": "em-andamento"|"concluido", "created", "updated",
                        #  "jargao_permitido"?: {"termo": "motivo"}}  # scoped jargon exception — see below
 ├── 00-problema.md     # statement, context, in/out of scope
 ├── 10-requisitos.md   # functional, non-functional, constraints
@@ -55,7 +55,6 @@ sessions/<yyyy-mm-dd>-<slug>/
 ├── 40-tradeoffs.md    # decisions: options considered, choice, what's gained/lost
 ├── 45-review.md       # adversarial review result (guardrails) — generated by the review skill
 ├── 50-operacao.md     # observability, deploy, rollback, DR, cost
-├── 60-avaliacao.md    # generated by the grade skill
 ├── 70-poc.md          # MVP folder structure by responsibility — written at the end of the initial design
 ├── 90-duvidas.md      # anticipated FAQ: questions the pilot predicts, 2-4 line answers
 ├── diagram.mmd        # main diagram (Mermaid), single source
@@ -66,22 +65,22 @@ sessions/<yyyy-mm-dd>-<slug>/
 
 | Operation | Command |
 |---|---|
-| Create session (full setup: skeleton + viewer + learnings/argumentário on stdout) | `node tools/new-session.mjs "<title>" --mode estudio\|entrevista [--slug <slug>] [--no-viewer]` → line 1 is the slug |
+| Create session (full setup: skeleton + viewer + learnings/padrões on stdout) | `node tools/new-session.mjs "<title>" [--slug <slug>] [--no-viewer]` → line 1 is the slug |
 | Create stages from template (several per call) | `node tools/stage.mjs <slug> <stage> [<stage>...] [--print]` (requisitos\|estimativas\|dominio\|design\|modelo\|tradeoffs\|operacao\|duvidas\|poc; `--print` only prints the template, for a direct Write) |
-| Any scorecard write (prefer multi-block `apply` via stdin) | `node tools/scorecard.mjs <slug> apply` ← stdin `{"components":[…],"costs":[…],"slos":[…],"capacity":[…],"risks":[…],"guardrails":{…},"rubric":{…}}` (granular commands `upsert-*`/`set-*`/`add-risks` still work; `remove-components`/`remove-costs`/`remove-slos`/`remove-capacity`/`remove-risks` drop a superseded entry — a revised number replaces the old one, it never sits next to it) |
+| Any scorecard write (prefer multi-block `apply` via stdin) | `node tools/scorecard.mjs <slug> apply` ← stdin `{"components":[…],"costs":[…],"slos":[…],"capacity":[…],"risks":[…],"guardrails":{…}}` (granular commands `upsert-*`/`set-*`/`add-risks` still work; `remove-components`/`remove-costs`/`remove-slos`/`remove-capacity`/`remove-risks` drop a superseded entry — a revised number replaces the old one, it never sits next to it) |
 | Consistency / baseline (validates before recording; prints the latest `--nota` when called without flags) | `node tools/check.mjs [<slug>] [--baseline] [--force] [--nota "<text>"]` |
 | Deterministic review lints (diagram↔scorecard coverage, queues, numbering, jargon, budget…) | `node tools/check.mjs <slug> --lint` |
 | List every lint predicate (id, requirement, output) — the single source of truth, never read the code to find out | `node tools/check.mjs --regras` |
 | Structural eval | `node tools/eval.mjs <slug> [--golden <dir>]` |
-| Write to `learnings.md`/`padroes.md`/`argumentario.md` (append/promote/note, validated, under lock — safe with parallel sessions) | `node tools/learnings.mjs append [--target learnings\|padroes\|argumentario] --session <slug>` ← stdin with `## title` items (learnings/padroes items missing a required field are refused, with the format in the message); `promote "<title>" --session <slug>`; `note "<title>" "<text>" [--target …]` |
+| Write to `learnings.md`/`padroes.md` (append/promote/note, validated, under lock — safe with parallel sessions) | `node tools/learnings.mjs append [--target learnings\|padroes] --session <slug>` ← stdin with `## title` items (an item missing a required field is refused, with the format in the message); `promote "<title>" --session <slug>`; `note "<title>" "<text>" [--target …]` |
 | Timeline of a conversation (tool calls × generation) | `node tools/timing.mjs --latest \| <transcript.jsonl>` |
 | Share a design (public link) | `node tools/share.mjs <slug>` — only when the user asks; afterward the viewer re-publishes on its own on every change (`--off` pauses it, `--delete` takes it down). Requires `SD_SHARE_BUCKET` and `SD_SHARE_BASE` in the environment; without them, tell the user instead of trying to publish |
 
-**The shared page IS the panel**: `share.mjs` embeds the same `app.js`/`style.css` as the viewer in static mode (data in `window.__DATA__`, auto-refresh by ETag). Every improvement to the panel goes automatically into the shared version — never create a divergence between the two without checking with the user. Main use case: the interviewer follows the link live during the interview.
+**The shared page IS the panel**: `share.mjs` embeds the same `app.js`/`style.css` as the viewer in static mode (data in `window.__DATA__`, auto-refresh by ETag). Every improvement to the panel goes automatically into the shared version — never create a divergence between the two without checking with the user. Main use case: a reviewer (or a `mesa` rehearsal) follows the link live.
 
 ### scorecard.json
 
-The session's executive panel. Fill in the blocks **as the data closes in the conversation** (don't leave it for the end): `slos` and `capacity` when requirements/estimates close; `costs.items` as each component enters the design (the `review` skill checks for cost per component); `guardrails` is written by the `review` skill; `rubric` by the `grade` skill. The viewer sums the total cost on its own — never write the total.
+The session's executive panel. Fill in the blocks **as the data closes in the conversation** (don't leave it for the end): `slos` and `capacity` when requirements/estimates close; `costs.items` as each component enters the design (the `review` skill checks for cost per component); `guardrails` is written by the `review` skill. The viewer sums the total cost on its own — never write the total.
 
 ```json
 {
@@ -90,13 +89,12 @@ The session's executive panel. Fill in the blocks **as the data closes in the co
   "components": [{ "name": "Redirect Service",
                    "purpose": "role in this design, ONE line (hover + sheet)",
                    "what": "what the component IS, a concept for any reader",
-                   "failure": "if it fails: impact + mitigation (the classic interview question)",
+                   "failure": "if it fails: impact + mitigation (the classic design-review question)",
                    "scaling": "how it scales / what's the limit / is it a bottleneck?",
                    "why": "the decision that put it there, 1-2 lines",
                    "rejected": ["short labels of the discarded options"], "tradeoff": "#3" }],
   "costs":    { "unit": "USD/mês", "items": [{ "component": "…", "cost": 450, "cost10x": 3800, "notes": "assumption behind the math" }] },
   "guardrails": { "pass": 0, "falha": 0, "na": 0, "premissas": 0, "riscos": 0, "falhas": ["summary of each open FALHA"] },
-  "rubric":   { "overall": 0, "scores": [{ "criterio": "…", "nota": 0 }] },
   "risks":    ["accepted risks / conscious out-of-scope calls"]
 }
 ```
@@ -117,7 +115,7 @@ The root `guardrails.md` is the quality gate: 34 items across three blocks — t
 
 The root `learnings.md` is the study's memory of **recurring mistakes** — each item has a fixed, validated format (`node tools/learnings.mjs` refuses anything else, citing the format): `**Status**: aberto|dominado`, `**Origem**: sessions/<slug> (date)`, `**Aprendizado**` (1-3 sentences), `**Como aplicar**` (a practical trigger for next time). `padroes.md` is its sibling for **decisions already resolved**: recurring patterns (301 vs 302, SQL vs KV…) with `**Escolha**`, `**Quando muda**`, a ready `**Defesa em 30s**`, and `**Visto em**`. Every entry in `40-tradeoffs.md` also ends with a **"Defesa em 30s"** line.
 
-- **When starting or continuing any session**: `new-session.mjs`'s stdout (or a manual read of `learnings.md`/`padroes.md` when continuing) delivers every open item, bracketed by two count lines so truncation is visible — actively use them (in studio mode, warn before the user repeats the mistake; in interview mode, probe exactly those areas to test whether they've improved). An item missing its `**Status**` line is treated as open by default, never silently dropped.
+- **When starting or continuing any session**: `new-session.mjs`'s stdout (or a manual read of `learnings.md`/`padroes.md` when continuing) delivers every open item, bracketed by two count lines so truncation is visible — actively use them, warning before the user repeats the mistake. An item missing its `**Status**` line is treated as open by default, never silently dropped.
 - **The moment something is corrected or a pattern repeats**, write it via `tools/learnings.mjs append --session <slug>` (or `--target padroes`) in the same turn — never by editing the file as text (parallel sessions would corrupt a concurrent write; the tool writes under a lock). If an open item was demonstrated solidly, `promote "<title>" --session <slug>`.
 
 ## Environment variables

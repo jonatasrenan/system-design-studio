@@ -25,7 +25,7 @@ flowchart TD
   O --> P{"FALHA<br/>open?"}
   P -->|yes| Q["fix, defer to Decisões<br/>adiadas, or accept as risk"]
   Q --> O
-  P -->|no| R["'how did I do?'<br/>/grade skill"]
+  P -->|no| R["'be the mesa'<br/>/mesa skill (optional)"]
   R --> S(("status: concluido"))
   E --> F
 ```
@@ -60,7 +60,7 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
 
 5. **Light close and first baseline.**
    Say: nothing — automatic, right after pass 1.
-   Pilot does: runs the deterministic lint, reports only the 3-5 failures an interviewer would actually raise, writes a POC sketch, records the session's first baseline.
+   Pilot does: runs the deterministic lint, reports only the 3-5 failures a sharp reviewer would raise first, writes a POC sketch, records the session's first baseline.
    You see: Review and POC/MVP tabs appear; the pipeline strip's dots turn from dashed (pending) to solid.
    Get the most: this is the point a design becomes shareable — it doesn't need to be finished for that.
 
@@ -88,11 +88,11 @@ Each row: **what you say** (a literal trigger phrase — close is fine, the pilo
    You see: the Review tab turns solid once every FALHA is addressed or accepted; the Overview's Guardrails card shows the final PASS/FALHA/N-A/premise/risk counts.
    Get the most: vetoing a fix leaves the item FALHA — accepting it as a risk is a separate, explicit step (it needs an entry in Overview's risks list and a recorded decision in Trade-offs, or it's still just an open FALHA).
 
-10. **Grade or mock interview (optional).**
-    Say: "how did I do?" (grades this session) or "let's do a mock interview" / "be the interviewer" (runs a live simulation instead).
-    Pilot does: `/grade` scores the session against the rubric and writes a study plan into Evaluation; `/interview` runs the whole thing as a simulation from scratch; `/interviewer` runs a pure interviewer with zero files, judging only the conversation (and a shared link, if you give it one).
-    You see: an Evaluation tab (grade/interview), or nothing written at all (a pure `/interviewer` run).
-    Get the most: this is what feeds `learnings.md` for next time — the next session you start prints every open item back to you.
+10. **Rehearse the defense (optional).**
+    Say: "be the mesa" / "I want to rehearse this".
+    Pilot does: the `/mesa` skill — a live skeptical reviewer that presses decisions to their consequence, demands the bill for every claim, and attacks whatever's drawn but never verbalized. It doesn't help, doesn't correct, and writes no file.
+    You see: nothing written — the whole thing happens in the conversation.
+    Get the most: this is what feeds `learnings.md` for next time — a gap that surfaces here is worth an `append` on the spot, and the next session you start prints every open item back to you. "How did I do?" has no separate answer: it's the closing summary `mesa` already gives, in chat.
 
 11. **Conclude.**
     Say: nothing explicit — it happens once the guardrails are clean.

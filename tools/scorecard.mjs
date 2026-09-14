@@ -5,9 +5,9 @@
 //
 // Preferred command (merges several blocks in ONE call):
 //   apply  '{"components":[...],"costs":[...],"slos":[...],"capacity":[...],
-//            "risks":[...],"guardrails":{...},"rubric":{...},"unit":"USD/mês"}'
+//            "risks":[...],"guardrails":{...},"unit":"USD/mês"}'
 //   (all keys optional; components/costs/slos/capacity upsert,
-//    risks appends with dedupe, guardrails/rubric replace, unit adjusts costs.unit)
+//    risks appends with dedupe, guardrails replaces, unit adjusts costs.unit)
 //
 // Granular commands (legacy, all idempotent; upsert matches on the natural key):
 //   upsert-components '[{"name","purpose","why"?,"rejected"?:[],"tradeoff"?}]'   (key: name)
@@ -16,7 +16,6 @@
 //   upsert-capacity   '[{"name","value"}]'                                        (key: name)
 //   add-risks         '["risk text"]'                                             (append, exact dedupe)
 //   set-guardrails    '{"pass","falha","na","premissas"?,"riscos"?,"falhas":[]}'   (premissas/riscos default 0)
-//   set-rubric        '{"overall","scores":[{"criterio","nota"}]}'
 //   remove-components '["name1","name2"]'   remove-costs    '["component1"]'
 //   remove-slos       '["name1"]'           remove-capacity '["name1"]'
 //   remove-risks      '["exact risk text"]'
@@ -48,7 +47,6 @@ const SKELETON = {
   components: [],
   costs: { unit: 'USD/mês', items: [] },
   guardrails: null,
-  rubric: null,
   risks: [],
 };
 // read-modify-write under lock: the flow emits several applies in parallel and, without
@@ -116,7 +114,6 @@ const validGuardrails = (p) =>
   ['premissas', 'riscos'].every((k) => p[k] === undefined || (typeof p[k] === 'number' && p[k] >= 0)) &&
   Array.isArray(p.falhas ?? []);
 const normalizeGuardrails = (p) => ({ premissas: 0, riscos: 0, ...p });
-const validRubric = (p) => p && typeof p.overall === 'number' && Array.isArray(p.scores);
 const stringArray = (p) => Array.isArray(p) && p.every((x) => typeof x === 'string');
 
 function addRisks(arr) {
@@ -131,7 +128,7 @@ const summaries = [];
 switch (cmd) {
   case 'apply': {
     if (typeof payload !== 'object' || Array.isArray(payload)) fail('apply expects a multi-block object');
-    const known = ['components', 'costs', 'slos', 'capacity', 'risks', 'guardrails', 'rubric', 'unit'];
+    const known = ['components', 'costs', 'slos', 'capacity', 'risks', 'guardrails', 'unit'];
     const unknown = Object.keys(payload).filter((k) => !known.includes(k));
     if (unknown.length) fail(`unknown blocks in apply: ${unknown.join(', ')} (accepted: ${known.join(', ')})`);
     sc.costs ??= { unit: 'USD/mês', items: [] };
@@ -155,11 +152,6 @@ switch (cmd) {
       summaries.push(
         `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
       );
-    }
-    if (payload.rubric) {
-      if (!validRubric(payload.rubric)) fail('malformed rubric: {overall:number, scores:[...]}');
-      sc.rubric = payload.rubric;
-      summaries.push(`rubric: overall ${payload.rubric.overall}`);
     }
     if (!summaries.length) fail('apply with no blocks — nothing to do');
     break;
@@ -187,11 +179,6 @@ switch (cmd) {
     summaries.push(
       `guardrails: ${sc.guardrails.pass} pass · ${sc.guardrails.falha} falha · ${sc.guardrails.na} n/a · ${sc.guardrails.premissas} premissa(s) · ${sc.guardrails.riscos} risco(s)`
     );
-    break;
-  case 'set-rubric':
-    if (!validRubric(payload)) fail('malformed rubric: {overall:number, scores:[...]}');
-    sc.rubric = payload;
-    summaries.push(`rubric: overall ${payload.overall}`);
     break;
   case 'remove-components':
     if (!stringArray(payload)) fail('remove-components expects a list of names');

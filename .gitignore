@@ -7,6 +7,8 @@ node_modules/
 # up as a change to send upstream
 learnings.md
 padroes.md
+# argumentario.md: retired (see the product-scope issue) but still gitignored as a
+# safety net for any pre-existing local copy — never re-created by the tools now
 argumentario.md
 
 # sessions are personal and don't go into the repository

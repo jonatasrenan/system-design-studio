@@ -1,6 +1,6 @@
 # Learnings
 
-Cross-session memory: mistakes that keep recurring and became attention triggers. Each item is born from an evaluation, a correction made during a study session, or research — and is read at the start of every new session, to warn before the mistake happens again (studio mode) or to become a target of provocation (interview mode).
+Cross-session memory: mistakes that keep recurring and became attention triggers. Each item is born from a review, a correction made during a session, or research — and is read at the start of every new session, to warn before the mistake happens again.
 
 Status: **aberto** (still a mistake/still forgotten) → **dominado** (demonstrated solidly in a later session).
 

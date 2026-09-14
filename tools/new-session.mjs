@@ -1,11 +1,10 @@
 // Deterministic and COMPLETE session setup — the LLM never types out the skeleton
 // nor spends extra calls on viewer/learnings.
-// Usage: node tools/new-session.mjs "Design title" [--mode estudio|entrevista]
-//                                    [--slug <slug>] [--no-viewer]
+// Usage: node tools/new-session.mjs "Design title" [--slug <slug>] [--no-viewer]
 // Does in one call: creates sessions/<yyyy-mm-dd>-<slug>/ (meta.json + scorecard.json),
 // makes sure the viewer is up (starts it in background if needed), and prints to stdout:
 //   line 1: the slug
-//   then:   viewer status, learnings with status "aberto", and the argumentário.
+//   then:   viewer status, learnings with status "aberto", and padrões.
 // The agent uses this output directly — no separate health curl or Reads.
 //
 // Parallel execution (several agents, one per session):
@@ -25,17 +24,10 @@ import { ensureMemoryFiles, loadEnv } from './pipeline.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const title = args.find((a) => !a.startsWith('--'));
-const mode = args.includes('--mode') ? args[args.indexOf('--mode') + 1] : 'estudio';
 const slugArg = args.includes('--slug') ? args[args.indexOf('--slug') + 1] : null;
 const noViewer = args.includes('--no-viewer') || process.env.SD_NO_VIEWER === '1';
 if (!title) {
-  console.error('usage: node tools/new-session.mjs "Design title" [--mode estudio|entrevista] [--slug <slug>] [--no-viewer]');
-  process.exit(1);
-}
-// a flag with no value (at the end of the line) used to create a session without "mode" — invalid
-// forever, blocking the Stop hook on every turn until someone edited meta.json by hand.
-if (!['estudio', 'entrevista'].includes(mode)) {
-  console.error(`invalid --mode: "${mode ?? '(empty)'}" — use estudio or entrevista`);
+  console.error('usage: node tools/new-session.mjs "Design title" [--slug <slug>] [--no-viewer]');
   process.exit(1);
 }
 if (args.includes('--slug') && !slugArg) {
@@ -79,7 +71,7 @@ fs.writeFileSync(
   path.join(dir, 'meta.json'),
   JSON.stringify(
     // uuid: the design's permanent identity — becomes the public path if it's ever shared
-    { title, mode, status: 'em-andamento', created: today, updated: today, uuid: crypto.randomUUID() },
+    { title, status: 'em-andamento', created: today, updated: today, uuid: crypto.randomUUID() },
     null,
     2
   ) + '\n'
@@ -94,7 +86,6 @@ fs.writeFileSync(
       components: [],
       costs: { unit: 'USD/mês', items: [] },
       guardrails: null,
-      rubric: null,
       risks: [],
     },
     null,
@@ -131,7 +122,7 @@ if (noViewer) {
   }
 }
 
-// --- open learnings + argumentário: delivered here, no separate Reads ---
+// --- open learnings + padrões: delivered here, no separate Reads ---
 ensureMemoryFiles(ROOT);
 const readRoot = (n) => {
   try {
@@ -168,9 +159,4 @@ const padroes = entriesOf(readRoot('padroes.md'));
 if (padroes.length) {
   console.log(`\n--- padrões (decisions already resolved, with the defense ready — don't re-discuss from scratch) ---`);
   console.log(padroes.join('\n\n'));
-}
-const argumentario = entriesOf(readRoot('argumentario.md'));
-if (argumentario.length) {
-  console.log(`\n--- argumentário (patterns already mastered — don't re-discuss from scratch) ---`);
-  console.log(argumentario.join('\n\n'));
 }

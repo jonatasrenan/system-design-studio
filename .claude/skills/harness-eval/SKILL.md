@@ -3,9 +3,9 @@ name: harness-eval
 description: Evaluates whether the harness produced a correct process/result for a session — a deterministic layer (tools/eval.mjs) + semantic judgment (LLM-as-judge), with an optional comparison against a golden session. Use after blind tests or changes to the harness.
 ---
 
-# /harness-eval — harness evaluation (not the candidate)
+# /harness-eval — harness evaluation (not the design, and not the person)
 
-Object of evaluation: **the harness's process**, not the quality of the design itself (that's `/grade`'s job). Preferably run it in a different Claude session than the one that produced the design (independent judge).
+Object of evaluation: **the harness's process**, not the quality of the design itself (that's `/review`'s job). Preferably run it in a different Claude session than the one that produced the design (independent judge).
 
 Arguments: `<slug|session path>` and optionally `--golden <dir>` (the user provides the golden's path; don't assume one).
 

@@ -20,15 +20,14 @@ export const ORDER = [
   '90-duvidas.md',
   '45-review.md',
   '70-poc.md',
-  '60-avaliacao.md',
 ];
 
 // Stages retired from the canonical pipeline. A file on disk with one of these names
 // (an old clone, a stray manual write) is hidden from both the local panel and the
 // shared page by this single constant, and flagged by check.mjs --lint ([etapa-aposentada])
-// instead of silently rendering as a raw filename tab. Empty for now — populated the
-// moment a stage is actually retired from ORDER.
-export const RETIRED_STAGES = [];
+// instead of silently rendering as a raw filename tab. 60-avaliacao.md is here because
+// the studio stopped scoring sessions on a fixed 1-4 scale — see the product-scope issue.
+export const RETIRED_STAGES = ['60-avaliacao.md'];
 
 // optional stages: absence never fails the check (not even in a completed session).
 // 25-dominio.md and 35-modelo-de-dados.md sit in causal DAG position (aggregate
@@ -52,7 +51,7 @@ export function stripHtmlComments(text) {
 // Internal jargon that must not leak into shareable artifacts (see CLAUDE.md).
 // "baseline" alone is a legitimate technical term — only command forms and internal names count.
 export const JARGON =
-  /\/(design|review|grade|interview|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard)\.mjs|scorecard\.json|learnings\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento/i;
+  /\/(design|review|mesa|harness-eval)\b|\bharness\b|\bchecker\b|--baseline|(check|eval|share|stage|new-session|scorecard)\.mjs|scorecard\.json|learnings\.md|SKILL\.md|\b(primeira|segunda|pr[óo]xima|1ª|2ª) passada\b|\bpassada (1|2|leve|preliminar|de refer[êe]ncia)\b|me corrija|nest[ae] revis[ãa]o|revis[ãa]o preliminar|fica(m)? para o polimento/i;
 
 // Lightweight parser for diagram.mmd (flowchart): nodes with label/shape/subgraph, and edges.
 // Covers the shapes used in this repo: id["x"] id[(x)] id[[x]] id((x)) id{x} id(x) id[x].
@@ -133,7 +132,7 @@ export function stageStatus(dir) {
         const empty = (a) => !Array.isArray(a) || a.length === 0;
         scEmpty =
           empty(sc.slos) && empty(sc.capacity) && empty(sc.components) &&
-          empty(sc.costs?.items) && !sc.guardrails && !sc.rubric && empty(sc.risks);
+          empty(sc.costs?.items) && !sc.guardrails && empty(sc.risks);
       } catch {}
     }
     let status;
@@ -168,10 +167,10 @@ export function stageStatus(dir) {
   return { baseline: base !== null, stages };
 }
 
-// User memory (learnings/argumentário) is personal and stays out of version control:
+// User memory (learnings/padrões) is personal and stays out of version control:
 // the repository versions only the `.template.md` files. Create on first need.
 export function ensureMemoryFiles(root) {
-  for (const name of ['learnings.md', 'padroes.md', 'argumentario.md']) {
+  for (const name of ['learnings.md', 'padroes.md']) {
     const file = path.join(root, name);
     if (fs.existsSync(file)) continue;
     const tpl = path.join(root, name.replace(/\.md$/, '.template.md'));

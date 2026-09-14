@@ -1,6 +1,6 @@
 // Structural, deterministic eval of a system design session.
 // Checks whether the harness produced every artifact in the expected shape —
-// semantic quality is still the job of /review and /grade.
+// semantic quality is still the job of /review.
 //
 // Usage:
 //   node tools/eval.mjs <slug|path>                 # evaluates one session
@@ -45,16 +45,13 @@ const add = (level, label, detail = '') => results.push({ level, label, detail }
 
 // --- meta ---
 const meta = readJson('meta.json');
-if (meta?.title && meta?.mode && meta?.status) add('ok', 'meta.json valid', `${meta.mode} · ${meta.status}`);
+if (meta?.title && meta?.status) add('ok', 'meta.json valid', meta.status);
 else add('fail', 'meta.json missing/incomplete');
 const concluido = meta?.status === 'concluido';
 
 // --- stages present ---
 const present = ORDER.filter((n) => fs.existsSync(path.join(dir, n)));
-// 60-avaliacao is only checked for a completed session — before grading, its absence is expected
-const missing = ORDER.filter(
-  (n) => !fs.existsSync(path.join(dir, n)) && !OPTIONAL.includes(n) && !(n === '60-avaliacao.md' && !concluido)
-);
+const missing = ORDER.filter((n) => !fs.existsSync(path.join(dir, n)) && !OPTIONAL.includes(n));
 add(
   missing.length === 0 ? 'ok' : concluido ? 'fail' : 'warn',
   `pipeline stages: ${present.length}/${ORDER.length}`,
@@ -103,9 +100,6 @@ else {
     const g = sc.guardrails;
     if (g && g.falha === 0 && g.pass > 0) add('ok', `guardrails: ${g.pass} pass · 0 falha · ${g.na} n/a`);
     else add('fail', 'completed without clean guardrails in the scorecard', JSON.stringify(g ?? null));
-    if (sc.rubric?.overall != null && sc.rubric?.scores?.length === 8)
-      add('ok', `rubric graded: ${sc.rubric.overall}/4 (8 criteria)`);
-    else add('warn', 'rubric missing/incomplete in the scorecard (did grade not run?)');
   }
 }
 
@@ -165,7 +159,7 @@ const learningItems = (learnings.replace(/```[\s\S]*?```/g, '').match(/^##\s+/gm
 add(
   learningItems > 0 ? 'ok' : 'warn',
   `learnings.md: ${learningItems} item(s)`,
-  learningItems === 0 ? 'expected ≥1 after a graded session' : ''
+  learningItems === 0 ? 'expected ≥1 once at least one session has been reviewed' : ''
 );
 
 // --- golden comparison ---

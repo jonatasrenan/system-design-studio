@@ -51,7 +51,7 @@ function checkSession(slug) {
   let meta = null;
   try {
     meta = JSON.parse(fs.readFileSync(file('meta.json'), 'utf8'));
-    for (const k of ['title', 'mode', 'status'])
+    for (const k of ['title', 'status'])
       if (!meta[k]) problems.push(`meta.json missing field "${k}"`);
   } catch (e) {
     problems.push(`meta.json missing or invalid: ${e.message}`);
