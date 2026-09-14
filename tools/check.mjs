@@ -237,15 +237,19 @@ function extractNumUnitTokens(text) {
   if (!text) return [];
   const out = [];
   // number + magnitude/duration/percent unit, directly adjacent (optional single space)
-  const reA = new RegExp(`(${NUMRAW})\\s?(?:k|mil|thousand|M|KB|MB|GB|ms|min|h|%)(?![A-Za-zÀ-ÿ])`, 'g');
-  for (const m of text.matchAll(reA)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
+  // the magnitude word is applied to the value ("150k" → 150000) so it compares equal
+  // to the expanded number on the backing side
+  const reA = new RegExp(`(${NUMRAW})\\s?(k|mil|thousand|M|KB|MB|GB|ms|min|h|%)(?![A-Za-zÀ-ÿ])`, 'g');
+  for (const m of text.matchAll(reA))
+    out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) * (MAGNITUDE[m[2]] ?? 1) });
   // rate units fused to the noun they describe ("avisos/s", "requisições/dia") — the
   // word in between is why these can't share reA's "directly adjacent" pattern
   const reB = new RegExp(`(${NUMRAW})\\s+[A-Za-zÀ-ÿ]+(?:\\/s|\\/dia|\\/day)`, 'g');
   for (const m of text.matchAll(reB)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
   // currency prefix
-  const reC = new RegExp(`(?:R\\$|US\\$|\\$)\\s?(${NUMRAW})`, 'g');
-  for (const m of text.matchAll(reC)) out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) });
+  const reC = new RegExp(`(?:R\\$|US\\$|\\$)\\s?(${NUMRAW})\\s?(k|mil|thousand|M)?(?![A-Za-zÀ-ÿ])`, 'g');
+  for (const m of text.matchAll(reC))
+    out.push({ text: m[0].trim(), value: parseBrNumber(m[1]) * (MAGNITUDE[m[2]] ?? 1) });
   return out;
 }
 

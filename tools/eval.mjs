@@ -73,7 +73,7 @@ const diagram = read('diagram.mmd');
 const dgNodes = diagram ? parseDiagram(diagram).nodes : [];
 const nodeIds = dgNodes.map((n) => n.id);
 // actors (clients subgraph) don't require a sheet — same exemption as the lint
-const coverNodes = dgNodes.filter((n) => !/cliente/i.test(n.subgraph ?? ''));
+const coverNodes = dgNodes.filter((n) => !(/cliente|client/i.test(n.subgraph ?? '') || n.label.includes('👤')));
 if (diagram && nodeIds.length >= 5 && /subgraph/.test(diagram))
   add('ok', `diagram with ${nodeIds.length} nodes and groupings`);
 else if (diagram) add('warn', `shallow diagram (${nodeIds.length} nodes, subgraphs: ${/subgraph/.test(diagram)})`);
