@@ -579,7 +579,7 @@ function lintSession(slug) {
         if (model) {
           const lifecycleStates = new Set([...sources, ...destinations].map(normVoc));
           const modelEr = extractMermaid(model) ?? '';
-          for (const m of modelEr.matchAll(/\bstate\b[^\n"]*"([^"]+)"/gi))
+          for (const m of modelEr.matchAll(/\b(?:state|estado)\b[^\n"]*"([^"]+)"/gi))
             for (const v of m[1].split('|').map((x) => x.trim()).filter(Boolean))
               if (!lifecycleStates.has(normVoc(v)))
                 fail(
