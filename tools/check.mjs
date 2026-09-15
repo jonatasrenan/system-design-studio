@@ -287,6 +287,12 @@ const RULES = [
   { id: 'domain-vocabulary', output: 'FAIL', requires: 'every "## Contexts" entry owns a vocabulary term; every vocabulary owner is a declared context' },
   { id: 'domain-model-vocabulary', output: 'FAIL', requires: "35-data-model.md's vocabulary terms match 25-domain.md's" },
   {
+    id: 'er-attribute',
+    output: 'FAIL',
+    requires:
+      "no erDiagram attribute named pk/fk/uk (any case) in any session .md — Mermaid reads the name as its PK/FK/UK key marker and the whole diagram fails to parse; the marker itself ('string id PK') is fine",
+  },
+  {
     id: 'dag-prose',
     output: 'FAIL',
     requires:
@@ -666,6 +672,42 @@ function lintSession(slug) {
         }
       }
     }
+  }
+
+  // --- [er-attribute]: Mermaid's erDiagram lexer reserves PK/FK/UK (case-insensitive)
+  // for the key marker after an attribute name, so an attribute *named* pk/fk/uk
+  // ("string pk ...") is a parse error that takes the whole diagram down — the one
+  // defect check.html shows and the source-reading lints didn't. Every ```mermaid
+  // fence with an erDiagram in every session .md is scanned; the marker in its own
+  // position ("string id PK") is legitimate and never reported. ---
+  for (const f of ORDER.filter((n) => n.endsWith('.md'))) {
+    const c = read(f);
+    if (!c) continue;
+    const lines = stripHtmlComments(c).split('\n');
+    let inMermaid = false; // inside a ```mermaid fence
+    let inEr = false; // ...whose header line is erDiagram
+    let depth = 0; // entity-block nesting ({ ... }) — attributes live at depth > 0
+    lines.forEach((line, i) => {
+      if (/^\s*```/.test(line)) {
+        inMermaid = !inMermaid && /^\s*```mermaid\b/.test(line);
+        inEr = false;
+        depth = 0;
+        return;
+      }
+      if (!inMermaid) return;
+      if (/^\s*erDiagram\b/.test(line)) {
+        inEr = true;
+        return;
+      }
+      if (!inEr || /^\s*%%/.test(line)) return;
+      if (depth > 0) {
+        // attribute line: <type> <name> [PK|FK|UK…] ["comment"] — only the name is checked
+        const m = /^\s*([^\s{}"]+)\s+(pk|fk|uk)(?=\s|$)/i.exec(line);
+        if (m) fail('er-attribute', `${f}:${i + 1} — erDiagram attribute named "${m[2]}" (Mermaid reserved key marker; the diagram fails to parse): "${line.trim()}"`);
+      }
+      const bare = line.replace(/"[^"]*"/g, ''); // braces inside a quoted comment don't nest
+      depth = Math.max(0, depth + (bare.match(/{/g) ?? []).length - (bare.match(/}/g) ?? []).length);
+    });
   }
 
   // --- [capacity] and [numbers]: catch a stale number left behind after a premise
