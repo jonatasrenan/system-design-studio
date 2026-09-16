@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node tools/check.mjs --hook",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/check.mjs\" --hook",
             "timeout": 15,
             "statusMessage": "Checking consistency of system design sessions…"
           }
